@@ -65,6 +65,15 @@ curl -X POST http://localhost:3000/learners/learner-1/answers -H 'content-type: 
 # Détection de misconception connue (は/が) → attribution au bon concept
 curl -X POST http://localhost:3000/learners/learner-1/answers -H 'content-type: application/json' \
   -d '{"activityId":"a2","activityType":"exact","expected":"は","learnerAnswer":"が","conceptsCovered":["particle-wa"]}'
+# Diagnostic adaptatif graph-aware : démarrer (renvoie l'item-sonde), puis répondre jusqu'à convergence
+DIAG=$(curl -s -X POST http://localhost:3000/learners/learner-1/diagnostic -H 'content-type: application/json' \
+  -d '{"domain":"japanese","targetSkills":["sentence"],"declaredLevel":"novice"}')
+echo "$DIAG"                        # sessionId + nextProbe (conceptId le plus informatif)
+SID=$(echo "$DIAG" | sed -E 's/.*"sessionId":"([^"]+)".*/\1/')
+CID=$(echo "$DIAG" | sed -E 's/.*"conceptId":"([^"]+)".*/\1/')
+# Répondre à l'item courant → MàJ + propagation sur le graphe ; à l'arrêt, priors semés dans la maîtrise
+curl -X POST "http://localhost:3000/learners/learner-1/diagnostic/$SID" -H 'content-type: application/json' \
+  -d "{\"conceptId\":\"$CID\",\"correct\":true}"
 ```
 
 ## Structure (§17)
@@ -74,7 +83,7 @@ apps/
   api/                 # Composition root NestJS (câble adapters ↔ ports par tokens)
 libs/
   shared-kernel/       # DomainEvent, IDs typés, Result, EventBus, Outbox + journal + relais
-  learning-engine/     # KERNEL : Goal, Curriculum Planner (glouton pondéré), Sequencer
+  learning-engine/     # KERNEL : Goal, Diagnostic adaptatif graph-aware, Planner (glouton), Sequencer
   knowledge-graph/     # Concept/Skill, prérequis pondérés, algos (topo, transitif), seed N5
   learner-modeling/    # Maîtrise + Oubli (FSRS+bayésien), EvidenceEvent, RecordEvidenceUseCase
   assessment/          # Correction déterministe/fuzzy, évidence pondérée, taxonomie + misconceptions

@@ -1,13 +1,27 @@
 import { Body, Controller, Get, Inject, NotFoundException, Param, Post } from '@nestjs/common';
-import { asId, type ConceptId, type LearnerId, type OutboxRelay } from '@unisson/shared-kernel';
+import {
+  asId,
+  type ConceptId,
+  type DiagnosticSessionId,
+  type LearnerId,
+  type OutboxRelay,
+  type SkillId,
+} from '@unisson/shared-kernel';
 import {
   LEARNER_STATE_REPOSITORY_PORT,
   masteryStage,
   RecordEvidenceUseCase,
+  SeedInitialStateUseCase,
   type LearnerStateRepositoryPort,
   type MasteryModel,
 } from '@unisson/learner-modeling';
 import { EvaluateAnswerUseCase, type ActivityType } from '@unisson/assessment';
+import {
+  DiagnosticSessionNotFoundError,
+  StartDiagnosticUseCase,
+  SubmitDiagnosticAnswerUseCase,
+  type DeclaredLevel,
+} from '@unisson/learning-engine';
 import { INFRA } from '../infra/infra.module';
 
 interface EvidenceBody {
@@ -30,15 +44,90 @@ interface AnswerBody {
   signals?: { latencyMs?: number; usedHint?: boolean; attempts?: number; selfConfidence?: number };
 }
 
+interface StartDiagnosticBody {
+  domain?: string;
+  targetSkills?: string[];
+  declaredLevel?: DeclaredLevel;
+  budget?: number;
+}
+
+interface DiagnosticAnswerBody {
+  conceptId?: string;
+  correct?: boolean;
+}
+
 @Controller('learners/:learnerId')
 export class LearnersController {
   constructor(
     @Inject(RecordEvidenceUseCase) private readonly recordEvidence: RecordEvidenceUseCase,
     @Inject(EvaluateAnswerUseCase) private readonly evaluateAnswer: EvaluateAnswerUseCase,
+    @Inject(StartDiagnosticUseCase) private readonly startDiagnostic: StartDiagnosticUseCase,
+    @Inject(SubmitDiagnosticAnswerUseCase) private readonly submitDiagnostic: SubmitDiagnosticAnswerUseCase,
+    @Inject(SeedInitialStateUseCase) private readonly seedInitialState: SeedInitialStateUseCase,
     @Inject(INFRA.OutboxRelay) private readonly relay: OutboxRelay,
     @Inject(INFRA.MasteryModel) private readonly model: MasteryModel,
     @Inject(LEARNER_STATE_REPOSITORY_PORT) private readonly stateRepo: LearnerStateRepositoryPort,
   ) {}
+
+  /** Démarre un diagnostic adaptatif graph-aware (§6.2) et renvoie le premier item-sonde. */
+  @Post('diagnostic')
+  async beginDiagnostic(@Param('learnerId') learnerIdRaw: string, @Body() body: StartDiagnosticBody) {
+    const learnerId = asId<'LearnerId'>(learnerIdRaw) as LearnerId;
+    if (!body.targetSkills?.length) throw new NotFoundException('targetSkills requis.');
+
+    const r = await this.startDiagnostic.execute({
+      learnerId,
+      domain: body.domain ?? 'japanese',
+      targetSkills: body.targetSkills.map((s) => asId<'SkillId'>(s) as SkillId),
+      declaredLevel: body.declaredLevel,
+      budget: body.budget,
+    });
+    await this.relay.drain();
+
+    return { sessionId: r.session.id, done: r.done, nextProbe: r.nextProbe, events: r.events.map((e) => e.type) };
+  }
+
+  /**
+   * Traite une réponse du diagnostic. À l'arrêt (budget/incertitude), sème les priors estimés dans
+   * le modèle de maîtrise (§8) — passage de relais Diagnostic → Learner Model → Planner.
+   */
+  @Post('diagnostic/:sessionId')
+  async answerDiagnostic(
+    @Param('learnerId') learnerIdRaw: string,
+    @Param('sessionId') sessionIdRaw: string,
+    @Body() body: DiagnosticAnswerBody,
+  ) {
+    const learnerId = asId<'LearnerId'>(learnerIdRaw) as LearnerId;
+    if (!body.conceptId) throw new NotFoundException('conceptId requis.');
+
+    try {
+      const r = await this.submitDiagnostic.execute({
+        sessionId: asId<'DiagnosticSessionId'>(sessionIdRaw) as DiagnosticSessionId,
+        conceptId: asId<'ConceptId'>(body.conceptId) as ConceptId,
+        correct: body.correct ?? false,
+      });
+
+      const seeded =
+        r.done && r.priors
+          ? await this.seedInitialState.execute({
+              learnerId,
+              priors: r.priors.map((p) => ({ conceptId: p.conceptId, pMastery: p.pMastery })),
+            })
+          : [];
+      await this.relay.drain();
+
+      return {
+        done: r.done,
+        nextProbe: r.nextProbe,
+        priors: r.done ? r.priors : null,
+        seededConcepts: seeded.length,
+        events: r.events.map((e) => e.type),
+      };
+    } catch (err) {
+      if (err instanceof DiagnosticSessionNotFoundError) throw new NotFoundException(err.message);
+      throw err;
+    }
+  }
 
   /** Enregistre une preuve, met à jour la maîtrise et diffuse les événements (§8, §12). */
   @Post('evidence')

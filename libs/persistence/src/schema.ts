@@ -105,6 +105,21 @@ export const learningPlan = pgTable(
   (t) => [index('plan_by_goal').on(t.goalId, t.version)],
 );
 
+// ── Diagnostic (Learning Engine) ─────────────────────────────────────────────────
+export const diagnosticSession = pgTable(
+  'diagnostic_session',
+  {
+    id: text('id').primaryKey(),
+    learnerId: text('learner_id').notNull(),
+    domain: text('domain').notNull(),
+    status: text('status').notNull(),
+    session: jsonb('session').$type<unknown>().notNull(),
+    createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (t) => [index('diagnostic_by_learner').on(t.learnerId, t.updatedAt)],
+);
+
 export const domainEvent = pgTable('domain_event', {
   eventId: text('event_id').primaryKey(),
   type: text('type').notNull(),
@@ -125,6 +140,7 @@ export const schema = {
   masteryState,
   evidenceEvent,
   learningPlan,
+  diagnosticSession,
   outbox,
   domainEvent,
 };

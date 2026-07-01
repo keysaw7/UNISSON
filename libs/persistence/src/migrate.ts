@@ -81,6 +81,17 @@ CREATE TABLE IF NOT EXISTS learning_plan (
 );
 CREATE INDEX IF NOT EXISTS plan_by_goal ON learning_plan (goal_id, version);
 
+CREATE TABLE IF NOT EXISTS diagnostic_session (
+  id text PRIMARY KEY,
+  learner_id text NOT NULL,
+  domain text NOT NULL,
+  status text NOT NULL,
+  session jsonb NOT NULL,
+  created_at text NOT NULL,
+  updated_at text NOT NULL
+);
+CREATE INDEX IF NOT EXISTS diagnostic_by_learner ON diagnostic_session (learner_id, updated_at);
+
 CREATE TABLE IF NOT EXISTS domain_event (
   event_id text PRIMARY KEY,
   type text NOT NULL,

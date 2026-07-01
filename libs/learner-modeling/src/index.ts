@@ -5,4 +5,5 @@ export * from './domain/mastery-events';
 export * from './ports/learner-state.repository.port';
 export * from './ports/evidence.repository.port';
 export * from './application/record-evidence.usecase';
+export * from './application/seed-initial-state.usecase';
 export * from './adapters/in-memory-learner-state.repository';

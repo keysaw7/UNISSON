@@ -121,4 +121,47 @@ describe('API (e2e) — walking skeleton', () => {
     expect(res.body.evidence.attributedConcept).toBe('particle-wa');
     expect(res.body.events).toContain('MisconceptionDetected');
   });
+
+  it('Diagnostic adaptatif : démarre, converge et sème les priors dans la maîtrise', async () => {
+    const started = await request(app.getHttpServer())
+      .post('/learners/learner-4/diagnostic')
+      .send({ domain: 'japanese', targetSkills: ['sentence'], declaredLevel: 'novice', budget: 12 });
+
+    expect(started.status).toBe(201);
+    expect(started.body.done).toBe(false);
+    expect(started.body.nextProbe.conceptId).toBeTruthy();
+    expect(started.body.events).toContain('DiagnosticStarted');
+
+    const sessionId = started.body.sessionId;
+    let probe = started.body.nextProbe;
+    let last: request.Response | null = null;
+    let guard = 0;
+
+    while (probe && guard < 20) {
+      last = await request(app.getHttpServer())
+        .post(`/learners/learner-4/diagnostic/${sessionId}`)
+        .send({ conceptId: probe.conceptId, correct: true });
+      expect(last.status).toBe(201);
+      probe = last.body.nextProbe;
+      guard += 1;
+    }
+
+    expect(last).not.toBeNull();
+    expect(last!.body.done).toBe(true);
+    expect(last!.body.priors.length).toBeGreaterThan(0);
+    expect(last!.body.seededConcepts).toBeGreaterThan(0);
+    expect(last!.body.events).toContain('InitialStateEstimated');
+
+    // Le prior est bien visible comme état de maîtrise initial.
+    const mastery = await request(app.getHttpServer()).get('/learners/learner-4/mastery/hiragana-a');
+    expect(mastery.status).toBe(200);
+    expect(mastery.body.state.pMastery).toBeGreaterThan(0);
+  });
+
+  it('POST /learners/:id/diagnostic/:sessionId → 404 si session inconnue', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/learners/learner-4/diagnostic/does-not-exist')
+      .send({ conceptId: 'hiragana-a', correct: true });
+    expect(res.status).toBe(404);
+  });
 });

@@ -21,3 +21,4 @@ export type PlanId = Id<'PlanId'>;
 export type ConceptId = Id<'ConceptId'>;
 export type SkillId = Id<'SkillId'>;
 export type ActivityId = Id<'ActivityId'>;
+export type DiagnosticSessionId = Id<'DiagnosticSessionId'>;

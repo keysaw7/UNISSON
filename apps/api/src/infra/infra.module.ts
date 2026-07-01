@@ -20,17 +20,23 @@ import {
   InMemoryLearnerStateRepository,
   LEARNER_STATE_REPOSITORY_PORT,
   RecordEvidenceUseCase,
+  SeedInitialStateUseCase,
   type EvidenceRepositoryPort,
   type LearnerStateRepositoryPort,
   type MasteryModel,
 } from '@unisson/learner-modeling';
 import {
   CreatePlanUseCase,
+  DIAGNOSTIC_SESSION_REPOSITORY_PORT,
+  InMemoryDiagnosticSessionRepository,
   InMemoryPlanRepository,
   NextActivityUseCase,
   PLAN_REPOSITORY_PORT,
   PLANNER_STRATEGY_PORT,
+  StartDiagnosticUseCase,
+  SubmitDiagnosticAnswerUseCase,
   WeightedGreedyPlanner,
+  type DiagnosticSessionRepositoryPort,
   type PlannerStrategyPort,
   type PlanRepositoryPort,
 } from '@unisson/learning-engine';
@@ -49,6 +55,7 @@ import {
   PgEventJournal,
   PgEvidenceRepository,
   PgKnowledgeGraphRepository,
+  PgDiagnosticSessionRepository,
   PgLearnerStateRepository,
   PgOutbox,
   PgPlanRepository,
@@ -169,6 +176,36 @@ const providers: Provider[] = [
     ): EvaluateAnswerUseCase => new EvaluateAnswerUseCase(grading, catalog, outbox),
     inject: [GRADING_STRATEGY_PORT, MISCONCEPTION_CATALOG_PORT, INFRA.Outbox],
   },
+  {
+    provide: DIAGNOSTIC_SESSION_REPOSITORY_PORT,
+    useFactory: (db: Db | null): DiagnosticSessionRepositoryPort =>
+      db ? new PgDiagnosticSessionRepository(db) : new InMemoryDiagnosticSessionRepository(),
+    inject: [INFRA.Db],
+  },
+  {
+    provide: StartDiagnosticUseCase,
+    useFactory: (
+      graph: KnowledgeGraphRepositoryPort,
+      sessions: DiagnosticSessionRepositoryPort,
+      outbox: OutboxPort,
+    ): StartDiagnosticUseCase => new StartDiagnosticUseCase(graph, sessions, outbox),
+    inject: [KNOWLEDGE_GRAPH_REPOSITORY_PORT, DIAGNOSTIC_SESSION_REPOSITORY_PORT, INFRA.Outbox],
+  },
+  {
+    provide: SubmitDiagnosticAnswerUseCase,
+    useFactory: (
+      graph: KnowledgeGraphRepositoryPort,
+      sessions: DiagnosticSessionRepositoryPort,
+      outbox: OutboxPort,
+    ): SubmitDiagnosticAnswerUseCase => new SubmitDiagnosticAnswerUseCase(graph, sessions, outbox),
+    inject: [KNOWLEDGE_GRAPH_REPOSITORY_PORT, DIAGNOSTIC_SESSION_REPOSITORY_PORT, INFRA.Outbox],
+  },
+  {
+    provide: SeedInitialStateUseCase,
+    useFactory: (state: LearnerStateRepositoryPort, model: MasteryModel): SeedInitialStateUseCase =>
+      new SeedInitialStateUseCase(state, model),
+    inject: [LEARNER_STATE_REPOSITORY_PORT, INFRA.MasteryModel],
+  },
 ];
 
 @Global()
@@ -191,6 +228,10 @@ const providers: Provider[] = [
     GRADING_STRATEGY_PORT,
     MISCONCEPTION_CATALOG_PORT,
     EvaluateAnswerUseCase,
+    DIAGNOSTIC_SESSION_REPOSITORY_PORT,
+    StartDiagnosticUseCase,
+    SubmitDiagnosticAnswerUseCase,
+    SeedInitialStateUseCase,
   ],
 })
 export class InfraModule {}

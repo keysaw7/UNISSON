@@ -2035,6 +2035,23 @@ Format : `ADR-NNN — Titre` · Statut · Contexte · Décision · Conséquences
   par-signal au lieu de constantes globales. La classification IA et le minage de misconceptions
   restent des extensions futures derrière les mêmes ports.
 
+### ADR-048 — Diagnostic adaptatif graph-aware : croyance par concept + propagation
+- **Statut :** ✅ Accepté (Phase 3)
+- **Contexte :** Placer l'apprenant vite et bien sur un **graphe** (maîtrise par région, pas un axe
+  unique), en **cold start** (§6.2, approche C).
+- **Décision :** Domaine **pur** raisonnant sur une croyance par concept `{pMastery, confidence}` :
+  prior logistique de (aptitude déclarée − difficulté) ; sélection de l'item le plus **informatif**
+  (incertitude × levier de voisinage) ; à chaque réponse, **MàJ bayésienne** du concept testé **puis
+  PROPAGATION** sur le graphe (réussite → prérequis inférés ↑, échec → dépendants inférés ↓) — c'est
+  ce qui permet d'inférer sans demander et de rester **court** (budget ≈ 8–12 items, ou arrêt quand
+  l'incertitude région passe sous le seuil). Le graphe concept est **aplati** depuis les prérequis au
+  niveau *skill* (`buildDiagnosticGraph`). La session est un agrégat persistable (mémoire/PG, JSONB).
+- **Conséquences :** La sortie n'est qu'un **prior** (`InitialStateEstimated`) ; `SeedInitialStateUseCase`
+  (Learner Modeling) le sème comme état initial **sans écraser** une maîtrise déjà construite par
+  evidence events (source de vérité). La boucle Maîtrise+Oubli (§8) corrige ensuite : placement
+  imparfait mais rapide, auto-corrigé — différenciateur vs tests de placement interminables. IRT
+  complet ultérieur derrière les mêmes fonctions/ports (recalibration hors-ligne).
+
 ---
 
 ## 19. Questions ouvertes / à approfondir
@@ -2097,11 +2114,17 @@ Format : `ADR-NNN — Titre` · Statut · Contexte · Décision · Conséquences
       propriétaire + `evidenceWeight`) ; catalogue de misconceptions (seed N5) → `attributedConcept`.
       `EvaluateAnswerUseCase` émet `AnswerEvaluated`/`MisconceptionDetected`/`SlipDetected`. API
       `POST /learners/:id/answers` **ferme la boucle** vers le Learner Model. Validé in-memory **et**
-      Postgres réel (64 tests). *(ADR-047)*
+      Postgres réel. *(ADR-047)*
+- [x] **Diagnostic adaptatif graph-aware** (§6.2) : croyance par concept (prior logistique) →
+      sélection de l'item le plus informatif → **MàJ bayésienne + propagation** sur le graphe (réussite
+      → prérequis ↑, échec → dépendants ↓) → arrêt court (budget/incertitude). `DiagnosticStarted`/
+      `DiagnosticItemAnswered`/`DiagnosticCompleted`/`InitialStateEstimated`. Session persistée
+      (mémoire/PG). API `POST /learners/:id/diagnostic` + `/:sessionId` sème les priors dans la
+      maîtrise (`SeedInitialStateUseCase`, sans écraser l'existant). Validé in-memory **et** Postgres
+      réel (73 tests). *(ADR-048)*
 
 **Prochaines étapes (Phase 3) :**
 
-- [ ] Diagnostic adaptatif graph-aware (IRT local + propagation bayésienne) (§6.2).
 - [ ] Format Selector (règles → bandit contraint) + génération de contenu via AI Gateway (§6.5).
 - [ ] Brancher un vrai fournisseur LLM derrière le `LLMPort` (cache, réparation, télémétrie).
 - [ ] pgvector (cache sémantique) + relais outbox → Kafka/Redpanda au scale.
