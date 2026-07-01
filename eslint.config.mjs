@@ -20,7 +20,9 @@ const forbiddenInPureLayers = [
 
 export default tseslint.config(
   {
-    ignores: ['**/dist/**', '**/node_modules/**', '**/coverage/**', '**/*.tsbuildinfo'],
+    // apps/web (Next.js) a son propre eslint.config.mjs (eslint-config-next) : frontières/règles
+    // NestJS+domaine ci-dessus ne s'y appliquent pas.
+    ignores: ['**/dist/**', '**/node_modules/**', '**/coverage/**', '**/*.tsbuildinfo', 'apps/web/**'],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

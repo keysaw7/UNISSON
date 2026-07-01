@@ -55,6 +55,14 @@ export class PlansController {
     return plan;
   }
 
+  /** Liste les plans d'un apprenant (le plus récent en premier) — retrouver le plan actif après rechargement. */
+  @Get('learners/:learnerId/plans')
+  async listForLearner(@Param('learnerId') learnerIdRaw: string) {
+    const learnerId = asId<'LearnerId'>(learnerIdRaw) as LearnerId;
+    const plans = await this.plans.listForLearner(learnerId);
+    return [...plans].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
   /** Sequencer : quelle activité maintenant ? (§9) */
   @Get('learners/:learnerId/plans/:planId/next-activity')
   async next(@Param('learnerId') learnerIdRaw: string, @Param('planId') planIdRaw: string) {

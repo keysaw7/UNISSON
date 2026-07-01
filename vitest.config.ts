@@ -1,5 +1,5 @@
 import { fileURLToPath } from 'node:url';
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 import swc from 'unplugin-swc';
 
 const r = (p: string) => fileURLToPath(new URL(p, import.meta.url));
@@ -33,6 +33,9 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['libs/**/*.test.ts', 'apps/**/*.test.ts', 'apps/**/*.e2e.test.ts'],
+    // apps/web (Next.js) a son propre vitest.config.ts (environnement jsdom, alias `@/*`,
+    // matchers jest-dom) — lancé séparément via `npm run test --workspace=apps/web`.
+    exclude: [...configDefaults.exclude, 'apps/web/**'],
     setupFiles: ['reflect-metadata'],
   },
 });

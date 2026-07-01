@@ -117,11 +117,21 @@ curl -X POST http://localhost:3000/format-efficacy -H 'content-type: application
 curl http://localhost:3000/format-efficacy/cloze/grammar
 ```
 
+### Frontend (apps/web)
+
+Next.js (App Router), pattern **BFF** — voir [`apps/web/README.md`](./apps/web/README.md) :
+
+```bash
+npm run start:api          # terminal 1 (port 3000)
+npm run dev -w apps/web    # terminal 2
+```
+
 ## Structure (§17)
 
 ```
 apps/
   api/                 # Composition root NestJS (câble adapters ↔ ports par tokens)
+  web/                 # Frontend Next.js (App Router, BFF) — voir apps/web/README.md
 libs/
   shared-kernel/       # DomainEvent, IDs typés, Result, EventBus, Outbox + journal + relais
   learning-engine/     # KERNEL : Goal, Diagnostic graph-aware, Planner, Sequencer, Format Selector

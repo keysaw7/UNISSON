@@ -80,6 +80,10 @@ describe('API (e2e) — walking skeleton', () => {
     expect(next.status).toBe(200);
     expect(['introduce', 'remediate', 'review']).toContain(next.body.activity.kind);
     expect(next.body.activity.rationale).toBeTruthy();
+
+    const listed = await request(app.getHttpServer()).get('/learners/learner-2/plans');
+    expect(listed.status).toBe(200);
+    expect(listed.body.some((p: { id: string }) => p.id === planId)).toBe(true);
   });
 
   it('POST /learners/:id/answers ferme la boucle : correction → évidence → maîtrise', async () => {
