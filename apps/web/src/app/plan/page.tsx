@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { CreatePlanForm } from '@/features/plan/create-plan-form';
 import { PlanView } from '@/features/plan/plan-view';
+import { LearningHistory } from '@/features/history/learning-history';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { getLearnerId } from '@/lib/get-learner-id';
@@ -25,6 +26,8 @@ export default async function PlanPage({ searchParams }: PlanPageProps) {
         <h1 className="text-2xl font-semibold tracking-tight">Plan</h1>
         <p className="text-sm text-muted-foreground">Curriculum Planner — §6.3 ARCHITECTURE.md</p>
       </div>
+
+      <LearningHistory />
 
       {targetSkills.length > 0 ? (
         <CreatePlanForm domain={sp.domain ?? 'japanese'} targetSkills={targetSkills} goalId={sp.goalId} motivation={sp.motivation} />

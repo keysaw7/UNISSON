@@ -30,8 +30,13 @@ export function listPlansForLearner(learnerId: string): Promise<LearningPlan[]> 
 }
 
 /** Sequencer (§9) : quelle activité maintenant (révision urgente, remédiation, nouveau concept) ? */
-export function getNextActivity(input: { learnerId: string; planId: string }): Promise<NextActivityResponse> {
+export function getNextActivity(input: {
+  learnerId: string;
+  planId: string;
+  lastConceptId?: string;
+}): Promise<NextActivityResponse> {
+  const qs = input.lastConceptId ? `?lastConceptId=${encodeURIComponent(input.lastConceptId)}` : '';
   return api.get<NextActivityResponse>(
-    `/learners/${encodeURIComponent(input.learnerId)}/plans/${encodeURIComponent(input.planId)}/next-activity`,
+    `/learners/${encodeURIComponent(input.learnerId)}/plans/${encodeURIComponent(input.planId)}/next-activity${qs}`,
   );
 }

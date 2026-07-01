@@ -2,8 +2,9 @@ import { asId, type ConceptId } from '@unisson/shared-kernel';
 import type { Misconception } from '../domain/misconception';
 import { normalize } from '../domain/text-matching';
 import type { MisconceptionCatalogPort } from '../ports/misconception-catalog.port';
+import { SPANISH_A1_MISCONCEPTIONS } from '../domain/spanish-a1-misconceptions';
 
-/** Amorçage expert (§6.4) : quelques misconceptions classiques du Japonais N5. */
+/** Amorçage expert (§6.4) : misconceptions classiques Japonais N5 + Espagnol A1. */
 export const JAPANESE_N5_MISCONCEPTIONS: Misconception[] = [
   {
     id: 'mc-wa-ga',
@@ -21,10 +22,15 @@ export const JAPANESE_N5_MISCONCEPTIONS: Misconception[] = [
   },
 ];
 
+export const DEFAULT_MISCONCEPTIONS: Misconception[] = [
+  ...JAPANESE_N5_MISCONCEPTIONS,
+  ...SPANISH_A1_MISCONCEPTIONS,
+];
+
 export class InMemoryMisconceptionCatalog implements MisconceptionCatalogPort {
   private readonly items: Misconception[];
 
-  constructor(items: Misconception[] = JAPANESE_N5_MISCONCEPTIONS) {
+  constructor(items: Misconception[] = DEFAULT_MISCONCEPTIONS) {
     this.items = items;
   }
 

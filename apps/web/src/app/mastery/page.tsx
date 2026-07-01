@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Progress } from '@/components/ui/progress';
 import { getLearnerId } from '@/lib/get-learner-id';
 import { conceptLabel } from '@/features/mastery/concept-label';
+import { CYCLE_STAGE_LABELS } from '@/features/mastery/cycle-stage-labels';
 import { loadMasteryOverview } from '@/features/mastery/load-mastery-overview';
 import { STAGE_INFO } from '@/features/mastery/stage-labels';
 
@@ -21,8 +22,10 @@ export default async function MasteryPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Maîtrise</h1>
-        <p className="text-sm text-muted-foreground">Modèle Maîtrise + Oubli (FSRS + bayésien) — §8 ARCHITECTURE.md</p>
+        <h1 className="text-2xl font-semibold tracking-tight">Maîtrise — Japonais N5</h1>
+        <p className="text-sm text-muted-foreground">
+          Maîtrise FSRS + étape du cycle pédagogique par concept (PEDAGOG.md)
+        </p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
@@ -65,6 +68,9 @@ export default async function MasteryPage() {
                       <span className="font-medium">{title}</span>
                       {subtitle && <span className="text-xs text-muted-foreground">{subtitle}</span>}
                       <Badge variant={stage.variant}>{stage.label}</Badge>
+                      {mastery.cycleStage && (
+                        <Badge variant="secondary">cycle : {CYCLE_STAGE_LABELS[mastery.cycleStage]}</Badge>
+                      )}
                       {mastery.isDue && (
                         <Badge variant="warning" className="flex items-center gap-1">
                           <Clock className="size-3" /> à réviser

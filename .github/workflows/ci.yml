@@ -35,11 +35,41 @@ jobs:
       - run: npm run typecheck --workspace=apps/web
       - run: npm run build --workspace=apps/web
 
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build --workspace=apps/web
+      - run: CI=true npm run e2e --workspace=apps/web
+        env:
+          E2E_API_PORT: '3099'
+          WEB_PORT: '3098'
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Build API Docker image
+        run: docker build -f Dockerfile.api -t unisson-api:ci .
+      - name: Build Web Docker image
+        run: docker build -f Dockerfile.web -t unisson-web:ci .
+
   integration:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16-alpine
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_USER: unisson
           POSTGRES_PASSWORD: unisson

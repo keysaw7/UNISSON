@@ -14,6 +14,14 @@ export function ThemeToggle() {
     setMounted(true);
   }, []);
 
+  if (!mounted) {
+    return (
+      <Button variant="ghost" size="icon" aria-label="Changer de thème" disabled>
+        <span className="size-4" aria-hidden />
+      </Button>
+    );
+  }
+
   return (
     <Button
       variant="ghost"
@@ -21,7 +29,7 @@ export function ThemeToggle() {
       aria-label="Changer de thème"
       onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
     >
-      {mounted && resolvedTheme === 'dark' ? <Sun /> : <Moon />}
+      {resolvedTheme === 'dark' ? <Sun /> : <Moon />}
     </Button>
   );
 }

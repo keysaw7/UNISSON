@@ -2,6 +2,7 @@ import type { ConceptId, SkillId } from '@unisson/shared-kernel';
 import type { ConceptType } from '@unisson/knowledge-graph';
 import type { MasteryStage } from '@unisson/learner-modeling';
 import type { Format } from '@unisson/content';
+import type { ConceptCycleStage } from './concept-learning-cycle';
 
 /**
  * Format Selector (§6.5) — la 6e décision du moteur : « sous quelle forme ». Le bon format dépend
@@ -26,10 +27,14 @@ export interface FormatDecisionContext {
   conceptType: ConceptType;
   intent: PedagogicalIntent;
   masteryStage: MasteryStage;
+  /** Étape du cycle pédagogique (PEDAGOG.md) — pilote la bande de formats en priorité. */
+  cycleStage?: ConceptCycleStage;
   hasMisconception: boolean;
   /** Difficulté cible fournie par le Sequencer (zone proximale) ; sinon dérivée du stade. */
   targetDifficulty?: number;
   learnerContext?: LearnerFormatContext;
+  /** Variante de formulation pour la variabilité (PEDAGOG § phase 12). */
+  contextVariant?: number;
 }
 
 export interface FormatSpec {
@@ -60,7 +65,29 @@ const DEFAULT_DIFFICULTY_BY_STAGE: Record<MasteryStage, number> = {
   mastered: 0.8,
 };
 
-/** Bande pédagogiquement valide (approche B), fonction de l'intention et — à défaut — du stade. */
+/** Bande pédagogique 1:1 avec l'étape du Concept Learning Cycle (PEDAGOG.md). */
+function bandForCycleStage(stage: ConceptCycleStage): Format[] {
+  switch (stage) {
+    case 'activation':
+      return ['activation_probe'];
+    case 'exposure':
+      return ['explanation', 'worked_example'];
+    case 'activeRecall':
+      return ['recall_production', 'cloze', 'mcq'];
+    case 'guidedPractice':
+      return ['mcq', 'cloze', 'flashcard_recognition'];
+    case 'freePractice':
+      return ['recall_production', 'translation', 'cloze'];
+    case 'consolidation':
+      return ['spaced_review', 'cloze', 'recall_production'];
+    case 'generationTransfer':
+      return ['generation_exercise', 'transfer_probe', 'project_task'];
+    case 'remediation':
+      return ['contrastive_remediation', 'explanation', 'worked_example'];
+  }
+}
+
+/** Bande pédagogiquement valide (approche B legacy), fonction de l'intention et — à défaut — du stade. */
 function bandForIntentAndStage(intent: PedagogicalIntent, stage: MasteryStage): Format[] {
   const byStage: Record<MasteryStage, Format[]> = {
     unknown: ['explanation', 'worked_example'],
@@ -114,10 +141,28 @@ function buildRationale(ctx: FormatDecisionContext, chosen: Format, fullBand: Fo
   if (ctx.hasMisconception && chosen === 'contrastive_remediation') {
     parts.push('misconception détectée → remédiation contrastive prioritaire');
   } else {
-    parts.push(`intention « ${ctx.intent} » + stade « ${ctx.masteryStage} »`);
+    parts.push(
+      ctx.cycleStage
+        ? `cycle « ${ctx.cycleStage} » (${cycleStageRationale(ctx.cycleStage)})`
+        : `intention « ${ctx.intent} » + stade « ${ctx.masteryStage} »`,
+    );
   }
   if (fullBand.length > 1) parts.push(`bande pédagogique valide : ${fullBand.join(', ')}`);
   return parts.join(' · ');
+}
+
+function cycleStageRationale(stage: ConceptCycleStage): string {
+  const labels: Record<ConceptCycleStage, string> = {
+    activation: 'activation préalable',
+    exposure: 'exposition',
+    activeRecall: 'rappel actif immédiat',
+    guidedPractice: 'pratique guidée',
+    freePractice: 'pratique autonome',
+    consolidation: 'consolidation',
+    generationTransfer: 'génération & transfert',
+    remediation: 'remédiation',
+  };
+  return labels[stage];
 }
 
 /**
@@ -127,9 +172,13 @@ function buildRationale(ctx: FormatDecisionContext, chosen: Format, fullBand: Fo
  */
 export class RuleBasedFormatSelector implements FormatSelectionStrategyPort {
   async select(ctx: FormatDecisionContext): Promise<FormatSpec> {
-    let band = bandForIntentAndStage(ctx.intent, ctx.masteryStage);
-    if (ctx.hasMisconception && band[0] !== 'contrastive_remediation') {
+    let band = ctx.cycleStage ? bandForCycleStage(ctx.cycleStage) : bandForIntentAndStage(ctx.intent, ctx.masteryStage);
+    if (ctx.hasMisconception && ctx.cycleStage !== 'remediation') {
       band = ['contrastive_remediation', ...band.filter((f) => f !== 'contrastive_remediation')];
+    }
+    // Filet de sécurité si cycleStage absent côté appelant (ne devrait pas arriver).
+    if (band.length === 0) {
+      band = bandForIntentAndStage(ctx.intent, ctx.masteryStage);
     }
 
     const feasible = band.filter((f) => isFeasible(f, ctx.learnerContext));

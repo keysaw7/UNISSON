@@ -8,6 +8,8 @@ import {
 } from '@unisson/learner-modeling';
 import { WeightedGreedyPlanner } from '../domain/planner-strategy';
 import { InMemoryPlanRepository } from '../adapters/in-memory-plan.repository';
+import { InMemoryConceptCycleRepository } from '../adapters/in-memory-concept-cycle.repository';
+import { AdvanceConceptCycleUseCase } from './advance-concept-cycle.usecase';
 import { CreatePlanUseCase } from './create-plan.usecase';
 import { NextActivityUseCase } from './next-activity.usecase';
 
@@ -21,6 +23,12 @@ const graph = new InMemoryKnowledgeGraphRepository();
 const model = new FsrsBayesianMasteryModel();
 let state: InMemoryLearnerStateRepository;
 let plans: InMemoryPlanRepository;
+let cycles: InMemoryConceptCycleRepository;
+
+function makeNextActivityUseCase() {
+  const cycleResolver = new AdvanceConceptCycleUseCase(cycles, state, model);
+  return new NextActivityUseCase(graph, state, model, plans, cycles, cycleResolver);
+}
 
 async function makePlan() {
   const planner = new CreatePlanUseCase(graph, state, new WeightedGreedyPlanner(), plans, new InMemoryOutbox());
@@ -31,6 +39,7 @@ async function makePlan() {
 beforeEach(() => {
   state = new InMemoryLearnerStateRepository();
   plans = new InMemoryPlanRepository();
+  cycles = new InMemoryConceptCycleRepository();
 });
 
 const saveState = (conceptId: string, over: Partial<MasteryState>): Promise<void> =>
@@ -46,7 +55,7 @@ const saveState = (conceptId: string, over: Partial<MasteryState>): Promise<void
 describe('NextActivityUseCase (Sequencer §9)', () => {
   it('sans historique → introduit un nouveau concept de la première compétence du plan', async () => {
     const plan = await makePlan();
-    const uc = new NextActivityUseCase(graph, state, model, plans);
+    const uc = makeNextActivityUseCase();
 
     const { activity } = await uc.execute({ learnerId, planId: plan.id, now: t0 });
     expect(activity.kind).toBe('introduce');
@@ -56,9 +65,8 @@ describe('NextActivityUseCase (Sequencer §9)', () => {
 
   it('donne la priorité absolue à une révision urgente (mémoire estompée)', async () => {
     const plan = await makePlan();
-    // Concept connu depuis longtemps → rétention effondrée → révision urgente.
     await saveState('hiragana-a', { pMastery: 0.9, stability: 1, lastReviewedAt: t0 });
-    const uc = new NextActivityUseCase(graph, state, model, plans);
+    const uc = makeNextActivityUseCase();
 
     const { activity } = await uc.execute({ learnerId, planId: plan.id, now: daysLater(60) });
     expect(activity.kind).toBe('review');
@@ -66,20 +74,18 @@ describe('NextActivityUseCase (Sequencer §9)', () => {
   });
 
   it('remédie le concept le plus faible quand la compétence de tête est partiellement connue', async () => {
-    // Neutralise les autres fondations pour que hiragana soit la compétence de tête du plan.
     for (const c of ['katakana-a', 'katakana-ka', 'kanji-ichi', 'kanji-nichi']) {
       await saveState(c, { pMastery: 0.95, stability: 30, lastReviewedAt: daysLater(59) });
     }
-    // Concepts de hiragana « connus » mais non maîtrisés, révisés à l'instant (pas dus).
     for (const [c, p] of [['hiragana-a', 0.6], ['hiragana-ka', 0.55], ['hiragana-sa', 0.7]] as const) {
       await saveState(c, { pMastery: p, stability: 20, lastReviewedAt: daysLater(59) });
     }
     const plan = await makePlan();
-    const uc = new NextActivityUseCase(graph, state, model, plans);
+    const uc = makeNextActivityUseCase();
 
     const { activity } = await uc.execute({ learnerId, planId: plan.id, now: daysLater(59) });
     expect(activity.kind).toBe('remediate');
     expect(activity.skillId).toBe(asId<'SkillId'>('hiragana'));
-    expect(activity.conceptId).toBe(asId<'ConceptId'>('hiragana-ka')); // le plus faible (0.55)
+    expect(activity.conceptId).toBe(asId<'ConceptId'>('hiragana-ka'));
   });
 });

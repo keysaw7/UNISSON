@@ -78,9 +78,10 @@ utiliser `gpt-5-nano`, mais `OPENAI_REASONING_EFFORT` / `OPENAI_VERBOSITY` /
 
 ```bash
 curl http://localhost:3000/health
-# Objectif (Phase 0)
+# Objectif (Phase 0) — persisté + événement GoalCreated
 curl -X POST http://localhost:3000/goals -H 'content-type: application/json' \
   -d '{"learnerId":"learner-1","statement":"je veux apprendre le japonais pour voyager"}'
+curl http://localhost:3000/learners/learner-1/goals
 # Graphe N5 : prérequis directs + transitifs (recursive CTE côté Postgres)
 curl http://localhost:3000/graph/skills/sentence/prerequisites
 # Boucle de maîtrise : enregistrer une preuve puis lire l'état

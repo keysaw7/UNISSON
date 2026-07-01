@@ -55,7 +55,7 @@ export class AiGateway {
 
   async execute<Output>(def: CapabilityDefinition<Output>): Promise<Output> {
     const key = cacheKey(def.name, def.promptVersion, def.cacheKeySeed);
-    const cached = await this.cache.get(key);
+    const cached = await this.cache.get(key, def.cacheKeySeed);
     if (cached) {
       const parsed = def.parse(cached);
       if (parsed.success) {
@@ -108,7 +108,7 @@ export class AiGateway {
       rawText = response.text;
       const parsed = def.parse(rawText);
       if (parsed.success) {
-        await this.cache.set(key, rawText, def.cacheTtlSeconds);
+        await this.cache.set(key, rawText, def.cacheTtlSeconds, def.cacheKeySeed);
         await this.telemetry.record({
           capability: def.name,
           model: usedFallback ? 'fallback' : 'primary',

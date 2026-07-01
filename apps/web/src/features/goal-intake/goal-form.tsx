@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useActionState, useEffect, useState } from 'react';
 import { ArrowRight, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -24,9 +24,21 @@ export function GoalForm() {
   const [state, formAction, isPending] = useActionState(submitGoalAction, INITIAL_STATE);
   const { goal, availableSkills = [] } = state;
 
-  const suggested = new Set(goal?.targetSkills ?? []);
-  const preselected = availableSkills.filter((s) => suggested.has(s.id));
-  const skillsToShow = preselected.length > 0 ? availableSkills : availableSkills;
+  const skillsToShow = availableSkills;
+
+  const [selectedSkills, setSelectedSkills] = useState<Set<string> | null>(null);
+
+  useEffect(() => {
+    if (!goal || availableSkills.length === 0) {
+      setSelectedSkills(null);
+      return;
+    }
+    const suggestedIds = new Set(goal.targetSkills);
+    const matched = availableSkills.filter((s) => suggestedIds.has(s.id));
+    setSelectedSkills(
+      new Set(matched.length > 0 ? matched.map((s) => s.id) : availableSkills.map((s) => s.id)),
+    );
+  }, [goal, availableSkills]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -34,8 +46,8 @@ export function GoalForm() {
         <CardHeader>
           <CardTitle>Quel est votre objectif ?</CardTitle>
           <CardDescription>
-            Décrivez-le en langage libre — le moteur l&apos;analyse et propose une cible dans le graphe de
-            compétences (§6.1). L&apos;IA propose, le moteur décide.
+            Décrivez votre objectif en japonais — le moteur propose une cible dans le graphe JLPT N5 (§6.1).
+            L&apos;IA propose, le moteur décide.
           </CardDescription>
         </CardHeader>
         <form action={formAction}>
@@ -44,10 +56,10 @@ export function GoalForm() {
             <Textarea
               id="statement"
               name="statement"
-              placeholder="ex. je veux apprendre le japonais pour voyager"
+              placeholder="ex. je veux lire des mangas en japonais et voyager au Japon"
               required
               minLength={3}
-              defaultValue="je veux apprendre le japonais pour voyager"
+              defaultValue="je veux apprendre le japonais pour voyager au Japon"
             />
             {state.error && <p className="text-sm text-destructive">{state.error}</p>}
           </CardContent>
@@ -78,7 +90,7 @@ export function GoalForm() {
                 <span>Confiance de l&apos;analyse</span>
                 <span>{Math.round(goal.confidence * 100)}%</span>
               </div>
-              <Progress value={goal.confidence * 100} />
+              <Progress value={Math.round(goal.confidence * 100)} />
             </div>
 
             {goal.clarificationsNeeded.length > 0 && (
@@ -88,12 +100,25 @@ export function GoalForm() {
               </RationaleCallout>
             )}
 
-            {goal.domain === 'unknown' || availableSkills.length === 0 ? (
+            {goal.domain !== 'japanese' || availableSkills.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                Domaine non reconnu par le pilote actuel (japonais N5 uniquement pour l&apos;instant). Reformulez
-                votre objectif autour du japonais pour continuer.
+                Ce parcours pilote cible exclusivement le <strong>japonais N5</strong>. Reformulez votre objectif
+                autour du japonais pour continuer.
               </p>
-            ) : (
+            ) : null}
+
+            {goal.successCriteria && goal.successCriteria.length > 0 && (
+              <div className="flex flex-col gap-2 border-t border-border pt-4">
+                <p className="text-sm font-medium">Critères de réussite</p>
+                <ul className="list-inside list-disc text-sm text-muted-foreground">
+                  {goal.successCriteria.map((c) => (
+                    <li key={c.id}>{c.description}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {goal.domain === 'japanese' && availableSkills.length > 0 && (
               <form action="/diagnostic" method="GET" className="flex flex-col gap-4 border-t border-border pt-4">
                 <input type="hidden" name="goalId" value={goal.id} />
                 <input type="hidden" name="domain" value={goal.domain} />
@@ -101,6 +126,7 @@ export function GoalForm() {
 
                 <div className="flex flex-col gap-2">
                   <Label>Compétences cibles à diagnostiquer</Label>
+                  {selectedSkills && (
                   <div className="grid gap-2 sm:grid-cols-2">
                     {skillsToShow.map((skill) => (
                       <label
@@ -111,13 +137,22 @@ export function GoalForm() {
                           type="checkbox"
                           name="targetSkills"
                           value={skill.id}
-                          defaultChecked={preselected.length > 0 ? suggested.has(skill.id) : true}
+                          checked={selectedSkills.has(skill.id)}
+                          onChange={(e) => {
+                            setSelectedSkills((prev) => {
+                              const next = new Set(prev ?? []);
+                              if (e.target.checked) next.add(skill.id);
+                              else next.delete(skill.id);
+                              return next;
+                            });
+                          }}
                           className="accent-primary"
                         />
                         {skill.title}
                       </label>
                     ))}
                   </div>
+                  )}
                 </div>
 
                 <div className="flex flex-col gap-2 sm:max-w-xs">

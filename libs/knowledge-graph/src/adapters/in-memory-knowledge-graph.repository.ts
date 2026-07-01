@@ -1,7 +1,8 @@
 import type { ConceptId, SkillId } from '@unisson/shared-kernel';
 import type { Concept, PrerequisiteEdge, Skill } from '../domain/concept';
 import { transitivePrerequisites } from '../domain/graph-algorithms';
-import { JAPANESE_N5_SEED, type KnowledgeGraphSeed } from '../domain/japanese-n5';
+import { DEFAULT_KNOWLEDGE_GRAPH_SEED } from '../domain/domain-seeds';
+import type { KnowledgeGraphSeed } from '../domain/japanese-n5';
 import type { KnowledgeGraphRepositoryPort } from '../ports/knowledge-graph.repository.port';
 
 /**
@@ -14,7 +15,7 @@ export class InMemoryKnowledgeGraphRepository implements KnowledgeGraphRepositor
   private readonly concepts: Concept[];
   private readonly skillConcepts: Array<{ skillId: SkillId; conceptId: ConceptId }>;
 
-  constructor(seed: KnowledgeGraphSeed = JAPANESE_N5_SEED) {
+  constructor(seed: KnowledgeGraphSeed = DEFAULT_KNOWLEDGE_GRAPH_SEED) {
     this.skills = seed.skills;
     this.prerequisites = seed.prerequisites;
     this.concepts = seed.concepts;

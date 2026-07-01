@@ -60,6 +60,10 @@ export function computeEvidenceWeight(errorType: ErrorType, signals: EvidenceSig
     case 'partial':
       w *= 0.7;
       break;
+    case 'misconception':
+    case 'missing_prerequisite':
+      w *= 0.85;
+      break;
     default:
       break;
   }

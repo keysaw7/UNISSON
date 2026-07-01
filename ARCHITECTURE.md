@@ -2199,5 +2199,15 @@ Format : `ADR-NNN — Titre` · Statut · Contexte · Décision · Conséquences
 
 **Prochaines étapes (Phase 3) :**
 
-- [ ] Cache **sémantique** (similarité d'embeddings, pgvector) en complément du cache exact déjà
+- [x] Cache **sémantique** (similarité d'embeddings, pgvector) en complément du cache exact déjà
       en place ; relais outbox → Kafka/Redpanda au scale.
+
+**Phase 4 — Cohérence produit & multi-domaines (réalisée) :**
+
+- [x] Persistance des **Goals** (`goal` + `GoalCreated` + API liste).
+- [x] Persistance des **Learning Objects** générés (`learning_object` + `PersistingContentGeneratorAdapter`).
+- [x] Identité apprenant formalisée (`learner` + `EnsureLearnerExistsUseCase`).
+- [x] Second domaine pilote **Espagnol A1** validé end-to-end sans modification du code métier.
+- [x] Tests E2E Playwright (parcours Goal → Diagnostic → Plan → Maîtrise).
+- [x] UX de reprise (historique goals/plans) + observabilité structurée + Docker/CD + sécurité de base.
+- [x] Port `LearnerInferencePort` (stub) + `ScalableOutboxRelay` pour le scale événementiel futur.

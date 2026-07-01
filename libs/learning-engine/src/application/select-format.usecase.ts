@@ -33,6 +33,7 @@ export class SelectFormatUseCase {
       targetRef: input.context.conceptId,
       format: spec.format,
       difficulty: spec.difficulty,
+      contextVariant: input.context.contextVariant,
     });
 
     const event = createEvent({

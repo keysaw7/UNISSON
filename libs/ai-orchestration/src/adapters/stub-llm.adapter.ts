@@ -29,6 +29,17 @@ export class StubLlmAdapter implements LLMPort {
         clarificationsNeeded: [],
       };
     }
+    if (p.includes('espagnol') || p.includes('spanish') || p.includes('español')) {
+      return {
+        domain: 'spanish',
+        targetSkills: ['greetings', 'basic-vocab', 'basic-conversation'],
+        targetLevel: 'A1',
+        motivation: p.includes('voyage') ? 'voyage' : undefined,
+        constraints: {},
+        confidence: 0.85,
+        clarificationsNeeded: [],
+      };
+    }
     if (p.includes('dévelop') || p.includes('develop') || p.includes('code') || p.includes('program')) {
       return {
         domain: 'programming',

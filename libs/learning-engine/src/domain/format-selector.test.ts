@@ -8,42 +8,41 @@ const baseCtx = (over: Partial<FormatDecisionContext> = {}): FormatDecisionConte
   conceptType: 'vocab',
   intent: 'practice',
   masteryStage: 'developing',
+  cycleStage: 'freePractice',
   hasMisconception: false,
   ...over,
 });
 
-describe('RuleBasedFormatSelector (approche B, §6.5)', () => {
-  it('respecte la progression pédagogique par stade (unknown → exposition, mastered → application)', async () => {
+describe('RuleBasedFormatSelector (approche B, §6.5 + cycle PEDAGOG)', () => {
+  it('respecte la progression pédagogique par cycle (exposition → rappel → génération)', async () => {
     const selector = new RuleBasedFormatSelector();
-    const unknown = await selector.select(baseCtx({ masteryStage: 'unknown' }));
-    expect(['explanation', 'worked_example']).toContain(unknown.format);
+    const exposure = await selector.select(baseCtx({ cycleStage: 'exposure' }));
+    expect(['explanation', 'worked_example']).toContain(exposure.format);
 
-    const mastered = await selector.select(baseCtx({ masteryStage: 'mastered' }));
-    expect(['project_task', 'dialogue_socratic', 'spaced_review']).toContain(mastered.format);
+    const activeRecall = await selector.select(baseCtx({ cycleStage: 'activeRecall' }));
+    expect(['recall_production', 'cloze', 'mcq']).toContain(activeRecall.format);
+
+    const transfer = await selector.select(baseCtx({ cycleStage: 'generationTransfer' }));
+    expect(['generation_exercise', 'transfer_probe', 'project_task']).toContain(transfer.format);
   });
 
   it('une misconception détectée force la remédiation contrastive en tête', async () => {
     const selector = new RuleBasedFormatSelector();
-    const spec = await selector.select(baseCtx({ hasMisconception: true, masteryStage: 'proficient' }));
+    const spec = await selector.select(baseCtx({ hasMisconception: true, cycleStage: 'freePractice' }));
     expect(spec.format).toBe('contrastive_remediation');
     expect(spec.rationale).toContain('remédiation');
   });
 
-  it('l’intention « review » priorise la révision espacée, jamais « rappel avant exposition »', async () => {
+  it('l’étape consolidation priorise la révision espacée', async () => {
     const selector = new RuleBasedFormatSelector();
-    const spec = await selector.select(baseCtx({ intent: 'review', masteryStage: 'developing' }));
+    const spec = await selector.select(baseCtx({ cycleStage: 'consolidation' }));
     expect(spec.format).toBe('spaced_review');
   });
 
-  it('faisabilité : speaking exclu sans micro, formats courts si peu de temps', async () => {
+  it('faisabilité : formats courts si peu de temps', async () => {
     const selector = new RuleBasedFormatSelector();
-    const noMic = await selector.select(
-      baseCtx({ intent: 'apply', masteryStage: 'mastered', learnerContext: { capabilities: { mic: false, camera: true } } }),
-    );
-    expect(noMic.format).not.toBe('speaking');
-
     const shortOnTime = await selector.select(
-      baseCtx({ masteryStage: 'developing', learnerContext: { availableMinutes: 2 } }),
+      baseCtx({ cycleStage: 'guidedPractice', learnerContext: { availableMinutes: 2 } }),
     );
     expect(['flashcard_recognition', 'mcq', 'cloze']).toContain(shortOnTime.format);
   });
@@ -51,18 +50,17 @@ describe('RuleBasedFormatSelector (approche B, §6.5)', () => {
   it('variété : déprioritise (sans l’éliminer) le format juste servi', async () => {
     const selector = new RuleBasedFormatSelector();
     const spec = await selector.select(
-      baseCtx({ masteryStage: 'developing', learnerContext: { recentFormats: ['cloze'] } }),
+      baseCtx({ cycleStage: 'freePractice', learnerContext: { recentFormats: ['cloze'] } }),
     );
     expect(spec.format).not.toBe('cloze');
     expect([spec.format, ...spec.fallbackFormats]).toContain('cloze'); // jamais éliminé, juste déprioritisé
   });
 
-  it('la bande valide n’est jamais vide même avec des contraintes fortes', async () => {
+  it('la bande valide n’est jamais vide', async () => {
     const selector = new RuleBasedFormatSelector();
     const spec = await selector.select(
       baseCtx({
-        masteryStage: 'mastered',
-        intent: 'apply',
+        cycleStage: 'generationTransfer',
         learnerContext: { fatigueLevel: 0.9, availableMinutes: 1, capabilities: { mic: false, camera: false } },
       }),
     );

@@ -9,7 +9,8 @@ const ctx: FormatDecisionContext = {
   skillId: asId<'SkillId'>('s1') as SkillId,
   conceptType: 'vocab',
   intent: 'practice',
-  masteryStage: 'developing', // bande : cloze, recall_production, translation
+  masteryStage: 'developing',
+  cycleStage: 'freePractice',
   hasMisconception: false,
 };
 
@@ -28,7 +29,7 @@ describe('ConstrainedBanditFormatSelector (approche C, §6.5)', () => {
       fixedRandom(0.99), // pas d'exploration
     );
     const spec = await bandit.select(ctx);
-    expect(spec.format).toBe('cloze'); // premier choix des règles
+    expect(spec.format).toBe('recall_production'); // premier choix des règles (cycle freePractice)
   });
 
   it('exploite la meilleure efficacité connue DANS la bande valide (jamais hors bande)', async () => {

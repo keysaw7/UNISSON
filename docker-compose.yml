@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     container_name: unisson-postgres
     environment:
       POSTGRES_USER: unisson
@@ -15,6 +15,35 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: unisson-api
+    environment:
+      PORT: 3000
+      DATABASE_URL: postgres://unisson:unisson@postgres:5432/unisson
+      LLM_PROVIDER: stub
+    ports:
+      - '3000:3000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    container_name: unisson-web
+    environment:
+      PORT: 3001
+      UNISSON_API_URL: http://api:3000
+      LEARNER_SESSION_SECRET: change-me-in-production
+    ports:
+      - '3001:3001'
+    depends_on:
+      - api
 
 volumes:
   unisson_pgdata:

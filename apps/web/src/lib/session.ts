@@ -13,9 +13,11 @@ export const LEARNER_COOKIE_NAME = 'unisson_learner';
 const COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 365; // 1 an
 
 function getSecret(): string {
-  // Pas de secret fort requis pour une identité invité (aucune donnée sensible
-  // protégée par cette signature) ; sert seulement à détecter une valeur altérée.
-  return process.env.LEARNER_SESSION_SECRET ?? 'unisson-dev-insecure-secret';
+  const secret = process.env.LEARNER_SESSION_SECRET;
+  if (process.env.NODE_ENV === 'production' && !secret?.trim()) {
+    throw new Error('LEARNER_SESSION_SECRET requis en production.');
+  }
+  return secret ?? 'unisson-dev-insecure-secret';
 }
 
 function toBase64Url(bytes: ArrayBuffer): string {

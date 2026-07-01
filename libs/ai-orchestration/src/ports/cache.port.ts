@@ -4,8 +4,8 @@
  * (similarité d'embeddings, pgvector) est une extension future derrière le même port.
  */
 export interface CachePort {
-  get(key: string): Promise<string | null>;
-  set(key: string, value: string, ttlSeconds?: number): Promise<void>;
+  get(key: string, seedText?: string): Promise<string | null>;
+  set(key: string, value: string, ttlSeconds?: number, seedText?: string): Promise<void>;
 }
 
 export const CACHE_PORT = Symbol('CachePort');

@@ -1,4 +1,5 @@
 import type { ConceptId, SkillId } from '@unisson/shared-kernel';
+import type { ConceptCycleStage } from './concept-learning-cycle';
 
 /** Un concept dû en révision (connu mais mémoire estompée). */
 export interface DueConcept {
@@ -14,6 +15,16 @@ export interface LearnCandidate {
   skillId: SkillId;
   skillTitle: string;
   pMastery: number;
+  cycleStage?: ConceptCycleStage;
+}
+
+export interface CycleCandidate {
+  conceptId: ConceptId;
+  skillId: SkillId;
+  cycleStage: ConceptCycleStage;
+  skillTitle: string;
+  pMastery: number;
+  retrievability?: number;
 }
 
 export interface SequencerContext {
@@ -21,6 +32,14 @@ export interface SequencerContext {
   due: DueConcept[];
   /** Prochaine brique d'apprentissage selon le plan, ou null si tout est traité. */
   learn: LearnCandidate | null;
+  /** Rappel actif bloquant post-exposition (PEDAGOG § phase 8). */
+  blockingActiveRecall?: CycleCandidate[];
+  /** Concepts en remédiation transversale. */
+  remediation?: CycleCandidate[];
+  /** Pool d'interleaving (≥2 concepts en pratique libre / consolidation). */
+  interleavePool?: CycleCandidate[];
+  /** Dernier concept servi en interleaving (anti-répétition immédiate). */
+  lastInterleavedConceptId?: ConceptId;
   /** En-dessous de ce seuil, une révision est URGENTE et passe avant tout (§9). */
   urgentThreshold?: number;
 }
@@ -31,6 +50,7 @@ export interface NextActivity {
   kind: ActivityKind;
   conceptId?: ConceptId;
   skillId?: SkillId;
+  cycleStage?: ConceptCycleStage;
   /** Difficulté cible = maîtrise actuelle + ε (zone proximale, ni ennui ni décrochage). */
   targetDifficulty?: number;
   rationale: string;
@@ -60,7 +80,34 @@ export function chooseNextActivity(ctx: SequencerContext): NextActivity {
       kind: 'review',
       conceptId: top.conceptId,
       skillId: top.skillId,
+      cycleStage: 'consolidation',
       rationale: `révision urgente (rétrievabilité ${top.retrievability.toFixed(2)} < ${urgentThreshold})`,
+    };
+  }
+
+  const blocking = ctx.blockingActiveRecall ?? [];
+  if (blocking.length > 0) {
+    const b = blocking[0]!;
+    return {
+      kind: 'introduce',
+      conceptId: b.conceptId,
+      skillId: b.skillId,
+      cycleStage: b.cycleStage,
+      targetDifficulty: clamp(b.pMastery + PROXIMAL_EPSILON, 0.1, 0.95),
+      rationale: `rappel actif immédiat obligatoire post-exposition (PEDAGOG § phase 8)`,
+    };
+  }
+
+  const remediation = ctx.remediation ?? [];
+  if (remediation.length > 0) {
+    const r = remediation[0]!;
+    return {
+      kind: 'remediate',
+      conceptId: r.conceptId,
+      skillId: r.skillId,
+      cycleStage: 'remediation',
+      targetDifficulty: clamp(r.pMastery + PROXIMAL_EPSILON, 0.1, 0.95),
+      rationale: `remédiation ciblée sur « ${r.skillTitle} »`,
     };
   }
 
@@ -71,11 +118,28 @@ export function chooseNextActivity(ctx: SequencerContext): NextActivity {
       kind: c.kind,
       conceptId: c.conceptId,
       skillId: c.skillId,
+      cycleStage: c.cycleStage,
       targetDifficulty,
       rationale:
         c.kind === 'remediate'
           ? `remédiation du prérequis faible « ${c.skillTitle} » (maîtrise ${c.pMastery.toFixed(2)})`
           : `nouveau concept de « ${c.skillTitle} » à difficulté ${targetDifficulty.toFixed(2)} (zone proximale)`,
+    };
+  }
+
+  const pool = ctx.interleavePool ?? [];
+  if (pool.length >= 2) {
+    const rotated =
+      ctx.lastInterleavedConceptId && pool.length > 1
+        ? [...pool.filter((p) => p.conceptId !== ctx.lastInterleavedConceptId), ...pool.filter((p) => p.conceptId === ctx.lastInterleavedConceptId)]
+        : pool;
+    const pick = rotated[0]!;
+    return {
+      kind: 'review',
+      conceptId: pick.conceptId,
+      skillId: pick.skillId,
+      cycleStage: pick.cycleStage,
+      rationale: `interleaving entre ${pool.length} concepts (PEDAGOG § phase 13)`,
     };
   }
 
@@ -85,6 +149,7 @@ export function chooseNextActivity(ctx: SequencerContext): NextActivity {
       kind: 'review',
       conceptId: top.conceptId,
       skillId: top.skillId,
+      cycleStage: 'consolidation',
       rationale: 'consolidation (aucun nouveau contenu prêt, on renforce l’acquis)',
     };
   }

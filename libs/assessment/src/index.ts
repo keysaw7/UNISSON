@@ -8,4 +8,5 @@ export * from './ports/grading-strategy.port';
 export * from './ports/misconception-catalog.port';
 export * from './application/evaluate-answer.usecase';
 export * from './adapters/rule-based-grading.strategy';
+export * from './domain/prerequisite-checker';
 export * from './adapters/in-memory-misconception-catalog';

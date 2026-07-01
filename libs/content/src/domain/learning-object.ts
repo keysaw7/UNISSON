@@ -12,7 +12,10 @@ export type Format =
   | 'dialogue_socratic'
   | 'project_task'
   | 'spaced_review'
-  | 'contrastive_remediation';
+  | 'contrastive_remediation'
+  | 'activation_probe'
+  | 'generation_exercise'
+  | 'transfer_probe';
 
 /** Objet pédagogique réutilisable (§7, couche 2). */
 export interface LearningObject {

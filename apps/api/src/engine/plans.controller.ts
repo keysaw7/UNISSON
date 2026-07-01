@@ -1,5 +1,5 @@
-import { Body, Controller, Get, Inject, NotFoundException, Param, Post } from '@nestjs/common';
-import { asId, makeId, type GoalId, type LearnerId, type OutboxRelay, type PlanId, type SkillId } from '@unisson/shared-kernel';
+import { Body, Controller, Get, Inject, NotFoundException, Param, Post, Query } from '@nestjs/common';
+import { asId, makeId, type ConceptId, type GoalId, type LearnerId, type OutboxRelay, type PlanId, type SkillId } from '@unisson/shared-kernel';
 import {
   CreatePlanUseCase,
   NextActivityUseCase,
@@ -63,12 +63,20 @@ export class PlansController {
     return [...plans].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
-  /** Sequencer : quelle activité maintenant ? (§9) */
+  /** Sequencer : quelle activité maintenant ? (§9 + cycle PEDAGOG) */
   @Get('learners/:learnerId/plans/:planId/next-activity')
-  async next(@Param('learnerId') learnerIdRaw: string, @Param('planId') planIdRaw: string) {
+  async next(
+    @Param('learnerId') learnerIdRaw: string,
+    @Param('planId') planIdRaw: string,
+    @Query('lastConceptId') lastConceptId?: string,
+  ) {
     const learnerId = asId<'LearnerId'>(learnerIdRaw) as LearnerId;
     const planId = asId<'PlanId'>(planIdRaw) as PlanId;
     if (!(await this.plans.getById(planId))) throw new NotFoundException(`Plan introuvable: ${planIdRaw}`);
-    return this.nextActivity.execute({ learnerId, planId });
+    return this.nextActivity.execute({
+      learnerId,
+      planId,
+      lastInterleavedConceptId: lastConceptId ? (asId<'ConceptId'>(lastConceptId) as ConceptId) : undefined,
+    });
   }
 }

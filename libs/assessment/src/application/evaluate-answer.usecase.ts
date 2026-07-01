@@ -4,15 +4,18 @@ import {
   type DomainEvent,
   type LearnerId,
   type OutboxPort,
+  type SkillId,
 } from '@unisson/shared-kernel';
 import type { AssessmentEvidence } from '../domain/assessment-evidence';
 import { ASSESSMENT_EVENTS } from '../domain/assessment-events';
 import { computeEvidenceWeight } from '../domain/error-analysis';
+import { PrerequisiteChecker } from '../domain/prerequisite-checker';
 import type { GradingInput, GradingStrategyPort } from '../ports/grading-strategy.port';
 import type { MisconceptionCatalogPort } from '../ports/misconception-catalog.port';
 
 export interface EvaluateAnswerInput extends GradingInput {
   learnerId: LearnerId;
+  skillId?: SkillId;
   correlationId?: string;
 }
 
@@ -22,22 +25,20 @@ export interface EvaluateAnswerResult {
 }
 
 /**
- * Cœur de l'Assessment (§6.4) : corrige (via `GradingStrategyPort`), attribue une erreur éventuelle
- * à une misconception connue, puis émet des ÉVÉNEMENTS (pas un verdict). `AnswerEvaluated` alimente
- * le modèle de maîtrise ; `MisconceptionDetected`/`SlipDetected` pilotent la remédiation.
- * Le moteur décide ; l'IA ne fait que classer/rédiger plus tard.
+ * Cœur de l'Assessment (§6.4) : corrige, attribue misconception / prérequis manquant,
+ * puis émet des ÉVÉNEMENTS pour la remédiation et le cycle pédagogique.
  */
 export class EvaluateAnswerUseCase {
   constructor(
     private readonly grading: GradingStrategyPort,
     private readonly catalog: MisconceptionCatalogPort,
     private readonly outbox: OutboxPort,
+    private readonly prerequisiteChecker?: PrerequisiteChecker,
   ) {}
 
   async execute(input: EvaluateAnswerInput): Promise<EvaluateAnswerResult> {
     const evidence = await this.grading.grade(input);
 
-    // Attribution : une erreur peut trahir une misconception connue sur l'un des concepts couverts.
     let matchedMisconception: { conceptId: ConceptId; id: string; description: string; remediationHint: string } | null =
       null;
     if (!evidence.correct) {
@@ -54,6 +55,22 @@ export class EvaluateAnswerUseCase {
       evidence.errorType = 'misconception';
       evidence.attributedConcept = matchedMisconception.conceptId;
       evidence.evidenceWeight = computeEvidenceWeight('misconception', evidence.signals);
+    } else if (
+      !evidence.correct &&
+      evidence.errorType !== 'slip' &&
+      this.prerequisiteChecker &&
+      input.skillId
+    ) {
+      const prereq = await this.prerequisiteChecker.check({
+        learnerId: input.learnerId,
+        skillId: input.skillId,
+        conceptsCovered: evidence.conceptsCovered,
+      });
+      if (prereq.missing && prereq.weakConceptId) {
+        evidence.errorType = 'missing_prerequisite';
+        evidence.attributedConcept = prereq.weakConceptId;
+        evidence.evidenceWeight = computeEvidenceWeight('missing_prerequisite', evidence.signals);
+      }
     }
 
     const primaryConcept = evidence.attributedConcept ?? evidence.conceptsCovered[0];
@@ -81,6 +98,21 @@ export class EvaluateAnswerUseCase {
             misconceptionId: matchedMisconception.id,
             description: matchedMisconception.description,
             remediationHint: matchedMisconception.remediationHint,
+          },
+        }),
+      );
+    } else if (evidence.errorType === 'missing_prerequisite' && evidence.attributedConcept) {
+      events.push(
+        createEvent({
+          type: ASSESSMENT_EVENTS.MissingPrerequisiteDetected,
+          aggregateType: 'Assessment',
+          aggregateId: evidence.activityId,
+          correlationId: answerEvaluated.correlationId,
+          causationId: answerEvaluated.eventId,
+          payload: {
+            learnerId: input.learnerId,
+            conceptId: primaryConcept!,
+            weakPrerequisiteConceptId: evidence.attributedConcept,
           },
         }),
       );

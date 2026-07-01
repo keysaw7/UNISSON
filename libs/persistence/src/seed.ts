@@ -1,9 +1,12 @@
-import { JAPANESE_N5_SEED, type KnowledgeGraphSeed } from '@unisson/knowledge-graph';
+import { DEFAULT_KNOWLEDGE_GRAPH_SEED, type KnowledgeGraphSeed } from '@unisson/knowledge-graph';
 import type { Db } from './client';
 import { concept, skill, skillConcept, skillPrerequisite } from './schema';
 
-/** Charge un graphe (par défaut Japonais N5) dans Postgres. Idempotent (onConflictDoNothing). */
-export async function seedKnowledgeGraph(db: Db, seed: KnowledgeGraphSeed = JAPANESE_N5_SEED): Promise<void> {
+/** Charge un graphe (par défaut multi-domaines) dans Postgres. Idempotent (onConflictDoNothing). */
+export async function seedKnowledgeGraph(
+  db: Db,
+  seed: KnowledgeGraphSeed = DEFAULT_KNOWLEDGE_GRAPH_SEED,
+): Promise<void> {
   await db
     .insert(skill)
     .values(seed.skills.map((s) => ({ id: s.id, title: s.title, domain: s.domain })))

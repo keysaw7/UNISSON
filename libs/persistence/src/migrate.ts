@@ -112,6 +112,59 @@ CREATE TABLE IF NOT EXISTS domain_event (
   causation_id text,
   payload jsonb NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS learner (
+  id text PRIMARY KEY,
+  created_at text NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS goal (
+  id text PRIMARY KEY,
+  learner_id text NOT NULL,
+  domain text NOT NULL,
+  goal jsonb NOT NULL,
+  created_at text NOT NULL
+);
+CREATE INDEX IF NOT EXISTS goal_by_learner ON goal (learner_id, created_at);
+
+CREATE TABLE IF NOT EXISTS learning_object (
+  id text PRIMARY KEY,
+  target_ref text NOT NULL,
+  format text NOT NULL,
+  difficulty double precision NOT NULL,
+  content_ref text NOT NULL,
+  provider text NOT NULL,
+  created_at text NOT NULL
+);
+CREATE INDEX IF NOT EXISTS learning_object_lookup ON learning_object (target_ref, format, difficulty);
+
+CREATE TABLE IF NOT EXISTS concept_learning_cycle (
+  learner_id text NOT NULL,
+  concept_id text NOT NULL,
+  skill_id text NOT NULL,
+  stage text NOT NULL,
+  consecutive_successes integer NOT NULL,
+  updated_at text NOT NULL,
+  PRIMARY KEY (learner_id, concept_id)
+);
+
+CREATE TABLE IF NOT EXISTS skill_activation (
+  learner_id text NOT NULL,
+  skill_id text NOT NULL,
+  activated_at text NOT NULL,
+  PRIMARY KEY (learner_id, skill_id)
+);
+
+CREATE EXTENSION IF NOT EXISTS vector;
+
+CREATE TABLE IF NOT EXISTS semantic_cache (
+  cache_key text PRIMARY KEY,
+  seed_text text NOT NULL,
+  response_text text NOT NULL,
+  embedding vector(64) NOT NULL,
+  created_at text NOT NULL
+);
+CREATE INDEX IF NOT EXISTS semantic_cache_embedding ON semantic_cache USING ivfflat (embedding vector_cosine_ops) WITH (lists = 16);
 `;
 
 export async function runMigrations(pool: Pool): Promise<void> {

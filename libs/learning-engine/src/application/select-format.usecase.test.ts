@@ -26,6 +26,7 @@ const context: FormatDecisionContext = {
   conceptType: 'grammar',
   intent: 'practice',
   masteryStage: 'developing',
+  cycleStage: 'freePractice',
   hasMisconception: false,
 };
 

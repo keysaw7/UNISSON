@@ -16,22 +16,32 @@ import {
   type MasteryModel,
 } from '@unisson/learner-modeling';
 import { EvaluateAnswerUseCase, type ActivityType } from '@unisson/assessment';
+import { EnsureLearnerExistsUseCase } from '@unisson/identity';
 import {
+  AdvanceConceptCycleUseCase,
+  CONCEPT_CYCLE_REPOSITORY_PORT,
+  cycleEventFromAnswer,
   DiagnosticSessionNotFoundError,
   StartDiagnosticUseCase,
   SubmitDiagnosticAnswerUseCase,
+  type ConceptCycleRepositoryPort,
+  type ConceptCycleStage,
+  type CycleTransitionEvent,
   type DeclaredLevel,
 } from '@unisson/learning-engine';
 import { INFRA } from '../infra/infra.module';
 
 interface EvidenceBody {
   conceptId?: string;
+  skillId?: string;
   correct?: boolean;
   score?: number;
   difficulty?: number;
   responseTimeMs?: number;
   evidenceWeight?: number;
   correlationId?: string;
+  cycleStage?: ConceptCycleStage;
+  usedHint?: boolean;
 }
 
 interface AnswerBody {
@@ -40,8 +50,16 @@ interface AnswerBody {
   expected?: string | string[];
   learnerAnswer?: string;
   conceptsCovered?: string[];
+  skillId?: string;
   difficulty?: number;
+  cycleStage?: ConceptCycleStage;
   signals?: { latencyMs?: number; usedHint?: boolean; attempts?: number; selfConfidence?: number };
+}
+
+interface CycleAdvanceBody {
+  conceptId?: string;
+  skillId?: string;
+  event?: CycleTransitionEvent;
 }
 
 interface StartDiagnosticBody {
@@ -61,18 +79,54 @@ export class LearnersController {
   constructor(
     @Inject(RecordEvidenceUseCase) private readonly recordEvidence: RecordEvidenceUseCase,
     @Inject(EvaluateAnswerUseCase) private readonly evaluateAnswer: EvaluateAnswerUseCase,
+    @Inject(AdvanceConceptCycleUseCase) private readonly advanceCycle: AdvanceConceptCycleUseCase,
+    @Inject(CONCEPT_CYCLE_REPOSITORY_PORT) private readonly cycles: ConceptCycleRepositoryPort,
     @Inject(StartDiagnosticUseCase) private readonly startDiagnostic: StartDiagnosticUseCase,
     @Inject(SubmitDiagnosticAnswerUseCase) private readonly submitDiagnostic: SubmitDiagnosticAnswerUseCase,
     @Inject(SeedInitialStateUseCase) private readonly seedInitialState: SeedInitialStateUseCase,
+    @Inject(EnsureLearnerExistsUseCase) private readonly ensureLearner: EnsureLearnerExistsUseCase,
     @Inject(INFRA.OutboxRelay) private readonly relay: OutboxRelay,
     @Inject(INFRA.MasteryModel) private readonly model: MasteryModel,
     @Inject(LEARNER_STATE_REPOSITORY_PORT) private readonly stateRepo: LearnerStateRepositoryPort,
   ) {}
 
+  /** Retourne l'apprenant pseudonyme (création idempotente au premier contact). */
+  @Get()
+  async getLearner(@Param('learnerId') learnerIdRaw: string) {
+    const learnerId = asId<'LearnerId'>(learnerIdRaw) as LearnerId;
+    return this.ensureLearner.execute({ learnerId });
+  }
+
+  /** États de cycle pédagogique par concept (PEDAGOG.md). */
+  @Get('cycle')
+  async listCycleStates(@Param('learnerId') learnerIdRaw: string) {
+    const learnerId = asId<'LearnerId'>(learnerIdRaw) as LearnerId;
+    const states = await this.cycles.listForLearner(learnerId);
+    return { states };
+  }
+
+  /** Fait avancer le cycle pédagogique (exposition → rappel actif, etc.). */
+  @Post('cycle/advance')
+  async advanceConceptCycle(@Param('learnerId') learnerIdRaw: string, @Body() body: CycleAdvanceBody) {
+    const learnerId = asId<'LearnerId'>(learnerIdRaw) as LearnerId;
+    if (!body.conceptId || !body.skillId || !body.event) {
+      throw new NotFoundException('conceptId, skillId et event requis.');
+    }
+    const result = await this.advanceCycle.execute({
+      learnerId,
+      conceptId: asId<'ConceptId'>(body.conceptId) as ConceptId,
+      skillId: asId<'SkillId'>(body.skillId) as SkillId,
+      event: body.event,
+    });
+    await this.relay.drain();
+    return result;
+  }
+
   /** Démarre un diagnostic adaptatif graph-aware (§6.2) et renvoie le premier item-sonde. */
   @Post('diagnostic')
   async beginDiagnostic(@Param('learnerId') learnerIdRaw: string, @Body() body: StartDiagnosticBody) {
     const learnerId = asId<'LearnerId'>(learnerIdRaw) as LearnerId;
+    await this.ensureLearner.execute({ learnerId });
     if (!body.targetSkills?.length) throw new NotFoundException('targetSkills requis.');
 
     const r = await this.startDiagnostic.execute({
@@ -87,10 +141,6 @@ export class LearnersController {
     return { sessionId: r.session.id, done: r.done, nextProbe: r.nextProbe, events: r.events.map((e) => e.type) };
   }
 
-  /**
-   * Traite une réponse du diagnostic. À l'arrêt (budget/incertitude), sème les priors estimés dans
-   * le modèle de maîtrise (§8) — passage de relais Diagnostic → Learner Model → Planner.
-   */
   @Post('diagnostic/:sessionId')
   async answerDiagnostic(
     @Param('learnerId') learnerIdRaw: string,
@@ -129,7 +179,6 @@ export class LearnersController {
     }
   }
 
-  /** Enregistre une preuve, met à jour la maîtrise et diffuse les événements (§8, §12). */
   @Post('evidence')
   async submitEvidence(@Param('learnerId') learnerIdRaw: string, @Body() body: EvidenceBody) {
     const learnerId = asId<'LearnerId'>(learnerIdRaw) as LearnerId;
@@ -146,6 +195,25 @@ export class LearnersController {
       evidenceWeight: body.evidenceWeight,
       correlationId: body.correlationId,
     });
+
+    let cycleState = null;
+    if (body.skillId && body.cycleStage) {
+      const event = cycleEventFromAnswer({
+        correct: body.correct ?? false,
+        usedHint: body.usedHint ?? false,
+        errorType: body.correct ? 'correct' : 'partial',
+        cycleStage: body.cycleStage,
+      });
+      cycleState = (
+        await this.advanceCycle.execute({
+          learnerId,
+          conceptId,
+          skillId: asId<'SkillId'>(body.skillId) as SkillId,
+          event,
+        })
+      ).state;
+    }
+
     await this.relay.drain();
 
     return {
@@ -153,15 +221,11 @@ export class LearnersController {
       retrievability: this.model.retrievability(state, state.lastReviewedAt),
       stage: masteryStage(state),
       isDue: this.model.isDue(state, state.lastReviewedAt),
+      cycleState,
       events: events.map((e) => e.type),
     };
   }
 
-  /**
-   * Ferme la boucle (§6.4 → §8) : corrige une réponse (Assessment → ÉVIDENCE pondérée + événements),
-   * puis alimente le modèle de maîtrise via `RecordEvidenceUseCase` sur le concept imputé. Un seul
-   * drain publie les événements des deux contextes, reliés par le même `correlationId`.
-   */
   @Post('answers')
   async submitAnswer(@Param('learnerId') learnerIdRaw: string, @Body() body: AnswerBody) {
     const learnerId = asId<'LearnerId'>(learnerIdRaw) as LearnerId;
@@ -175,6 +239,7 @@ export class LearnersController {
       expected: body.expected ?? '',
       learnerAnswer: body.learnerAnswer ?? '',
       conceptsCovered: body.conceptsCovered,
+      skillId: body.skillId ? (asId<'SkillId'>(body.skillId) as SkillId) : undefined,
       difficulty: body.difficulty,
       signals: body.signals,
     });
@@ -195,17 +260,35 @@ export class LearnersController {
         })
       : null;
 
+    let cycleState = null;
+    if (body.skillId && body.cycleStage && primaryConcept) {
+      const event = cycleEventFromAnswer({
+        correct: evidence.correct,
+        usedHint: body.signals?.usedHint ?? false,
+        errorType: evidence.errorType,
+        cycleStage: body.cycleStage,
+      });
+      cycleState = (
+        await this.advanceCycle.execute({
+          learnerId,
+          conceptId: primaryConcept,
+          skillId: asId<'SkillId'>(body.skillId) as SkillId,
+          event,
+        })
+      ).state;
+    }
+
     await this.relay.drain();
 
     return {
       evidence,
       state: mastery?.state ?? null,
       stage: mastery ? masteryStage(mastery.state) : null,
+      cycleState,
       events: [...assessmentEvents, ...(mastery?.events ?? [])].map((e) => e.type),
     };
   }
 
-  /** État de maîtrise courant d'un concept (projection + rétrievabilité au moment de la requête). */
   @Get('mastery/:conceptId')
   async getMastery(@Param('learnerId') learnerIdRaw: string, @Param('conceptId') conceptIdRaw: string) {
     const learnerId = asId<'LearnerId'>(learnerIdRaw) as LearnerId;
@@ -215,6 +298,7 @@ export class LearnersController {
       (await this.stateRepo.getMastery(learnerId, conceptId)) ??
       this.model.initialState(learnerId, conceptId);
     const now = new Date().toISOString();
+    const cycle = await this.cycles.get(learnerId, conceptId);
 
     return {
       state,
@@ -222,6 +306,7 @@ export class LearnersController {
       memoryRetention: this.model.memoryRetention(state, now),
       stage: masteryStage(state),
       isDue: this.model.isDue(state, now),
+      cycleStage: cycle?.stage ?? null,
     };
   }
 }

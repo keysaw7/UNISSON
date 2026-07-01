@@ -8,7 +8,7 @@ async function main(): Promise<void> {
   try {
     await runMigrations(pool);
     await seedKnowledgeGraph(createDb(pool));
-    console.log('✓ Base migrée et graphe N5 chargé.');
+    console.log('✓ Base migrée et graphes multi-domaines chargés (Japonais N5 + Espagnol A1).');
   } finally {
     await pool.end();
   }

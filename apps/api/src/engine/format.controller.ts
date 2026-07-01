@@ -8,9 +8,11 @@ import {
   type MasteryModel,
 } from '@unisson/learner-modeling';
 import {
+  AdvanceConceptCycleUseCase,
   FORMAT_EFFICACY_REPOSITORY_PORT,
   RecordFormatEfficacyUseCase,
   SelectFormatUseCase,
+  type ConceptCycleStage,
   type FormatEfficacyRepositoryPort,
   type LearnerFormatContext,
   type PedagogicalIntent,
@@ -23,8 +25,10 @@ interface FormatSelectionBody {
   skillId?: string;
   conceptType?: ConceptType;
   intent?: PedagogicalIntent;
+  cycleStage?: ConceptCycleStage;
   hasMisconception?: boolean;
   targetDifficulty?: number;
+  contextVariant?: number;
   learnerContext?: LearnerFormatContext;
 }
 
@@ -44,6 +48,7 @@ export class FormatController {
     @Inject(SelectFormatUseCase) private readonly selectFormat: SelectFormatUseCase,
     @Inject(RecordFormatEfficacyUseCase) private readonly recordEfficacy: RecordFormatEfficacyUseCase,
     @Inject(FORMAT_EFFICACY_REPOSITORY_PORT) private readonly efficacyRepo: FormatEfficacyRepositoryPort,
+    @Inject(AdvanceConceptCycleUseCase) private readonly cycleResolver: AdvanceConceptCycleUseCase,
     @Inject(INFRA.OutboxRelay) private readonly relay: OutboxRelay,
     @Inject(INFRA.MasteryModel) private readonly model: MasteryModel,
     @Inject(LEARNER_STATE_REPOSITORY_PORT) private readonly stateRepo: LearnerStateRepositoryPort,
@@ -54,21 +59,26 @@ export class FormatController {
     if (!body.conceptId || !body.skillId) throw new NotFoundException('conceptId et skillId requis.');
     const learnerId = asId<'LearnerId'>(learnerIdRaw) as LearnerId;
     const conceptId = asId<'ConceptId'>(body.conceptId) as ConceptId;
+    const skillId = asId<'SkillId'>(body.skillId) as SkillId;
 
     const state = await this.stateRepo.getMastery(learnerId, conceptId);
     const stage = state ? masteryStage(state) : masteryStage(this.model.initialState(learnerId, conceptId));
+    const cycle = await this.cycleResolver.resolve(learnerId, conceptId, skillId);
+    const contextVariant = body.contextVariant ?? Math.floor(Math.random() * 1000);
 
     const { spec, learningObject, events } = await this.selectFormat.execute({
       learnerId,
       context: {
         conceptId,
-        skillId: asId<'SkillId'>(body.skillId) as SkillId,
+        skillId,
         conceptType: body.conceptType ?? 'generic',
         intent: body.intent ?? 'practice',
         masteryStage: stage,
+        cycleStage: body.cycleStage ?? cycle.stage,
         hasMisconception: body.hasMisconception ?? false,
         targetDifficulty: body.targetDifficulty,
         learnerContext: body.learnerContext,
+        contextVariant,
       },
     });
     await this.relay.drain();
@@ -79,6 +89,7 @@ export class FormatController {
       rationale: spec.rationale,
       fallbackFormats: spec.fallbackFormats,
       masteryStage: stage,
+      cycleStage: body.cycleStage ?? cycle.stage,
       learningObject,
       events: events.map((e) => e.type),
     };

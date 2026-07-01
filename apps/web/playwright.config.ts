@@ -1,18 +1,39 @@
 import { defineConfig, devices } from '@playwright/test';
 
-/**
- * E2e du parcours complet (§2 du plan frontend : "Playwright pour l'e2e du parcours complet
- * goal → diagnostic → plan → session → feedback"). Nécessite l'API (`npm run start:api`) et le
- * frontend (`npm run dev`, ou `webServer` ci-dessous) démarrés — voir `tests/e2e/README.md`.
- */
+const WEB_PORT = process.env.WEB_PORT ?? '3001';
+const API_PORT = process.env.E2E_API_PORT ?? '3099';
+const API_URL = `http://localhost:${API_PORT}`;
+const WEB_URL = `http://localhost:${WEB_PORT}`;
+
 export default defineConfig({
-  testDir: './tests/e2e',
-  fullyParallel: true,
+  testDir: './e2e',
+  fullyParallel: false,
+  forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
-  reporter: 'list',
+  workers: 1,
+  reporter: process.env.CI ? 'github' : 'list',
+  timeout: 120_000,
   use: {
-    baseURL: process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3000',
+    baseURL: WEB_URL,
     trace: 'on-first-retry',
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  webServer: [
+    {
+      command: `PORT=${API_PORT} npm run start:api`,
+      url: `${API_URL}/health`,
+      reuseExistingServer: true,
+      timeout: 120_000,
+      cwd: '../..',
+    },
+    {
+      command: process.env.CI
+        ? `PORT=${WEB_PORT} UNISSON_API_URL=${API_URL} npm run start --workspace=apps/web`
+        : `PORT=${WEB_PORT} UNISSON_API_URL=${API_URL} npm run dev -w apps/web`,
+      url: WEB_URL,
+      reuseExistingServer: true,
+      timeout: 120_000,
+      cwd: '../..',
+    },
+  ],
 });

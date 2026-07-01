@@ -23,6 +23,12 @@ export interface MisconceptionDetectedPayload {
   remediationHint: string;
 }
 
+export interface MissingPrerequisiteDetectedPayload {
+  learnerId: LearnerId;
+  conceptId: ConceptId;
+  weakPrerequisiteConceptId: ConceptId;
+}
+
 export interface SlipDetectedPayload {
   learnerId: LearnerId;
   conceptId: ConceptId;

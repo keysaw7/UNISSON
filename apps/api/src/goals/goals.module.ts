@@ -1,7 +1,15 @@
 import { Module } from '@nestjs/common';
-import { GOAL_PARSER_PORT, StartGoalUseCase, type GoalParserPort } from '@unisson/learning-engine';
+import {
+  GOAL_PARSER_PORT,
+  GOAL_REPOSITORY_PORT,
+  StartGoalUseCase,
+  type GoalParserPort,
+  type GoalRepositoryPort,
+} from '@unisson/learning-engine';
 import { AI_GATEWAY, GoalParserAdapter, type AiGateway } from '@unisson/ai-orchestration';
-import { GoalsController } from './goals.controller';
+import type { OutboxPort } from '@unisson/shared-kernel';
+import { INFRA } from '../infra/infra.module';
+import { GoalsController, LearnerGoalsController } from './goals.controller';
 
 /**
  * Composition root du contexte Goal (§17.2). L'`AI_GATEWAY` (cache, réparation, télémétrie,
@@ -9,7 +17,7 @@ import { GoalsController } from './goals.controller';
  * Selector, §6.5) ; changer de fournisseur IA = changer une seule factory, rien d'autre à toucher ici.
  */
 @Module({
-  controllers: [GoalsController],
+  controllers: [GoalsController, LearnerGoalsController],
   providers: [
     {
       provide: GOAL_PARSER_PORT,
@@ -18,8 +26,9 @@ import { GoalsController } from './goals.controller';
     },
     {
       provide: StartGoalUseCase,
-      useFactory: (goalParser: GoalParserPort) => new StartGoalUseCase(goalParser),
-      inject: [GOAL_PARSER_PORT],
+      useFactory: (goalParser: GoalParserPort, goals: GoalRepositoryPort, outbox: OutboxPort) =>
+        new StartGoalUseCase(goalParser, goals, outbox),
+      inject: [GOAL_PARSER_PORT, GOAL_REPOSITORY_PORT, INFRA.Outbox],
     },
   ],
 })

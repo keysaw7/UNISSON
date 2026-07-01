@@ -9,7 +9,7 @@ import type { LearningPlan } from '@unisson/learning-engine';
 import type { MasteryStage, MasteryState } from '@unisson/learner-modeling';
 import type { AssessmentEvidence, ErrorType } from '@unisson/assessment';
 import type { Format, LearningObject } from '@unisson/content';
-import type { ActivityKind } from '@unisson/learning-engine';
+import type { ActivityKind, ConceptCycleStage } from '@unisson/learning-engine';
 
 export interface StructuredGoalResponse {
   id: string;
@@ -22,6 +22,7 @@ export interface StructuredGoalResponse {
   constraints: { minutesPerDay?: number; deadline?: string; preferredFormats?: string[] };
   confidence: number;
   clarificationsNeeded: string[];
+  successCriteria?: Array<{ id: string; description: string; measurable: boolean }>;
 }
 
 export interface CreatePlanResponse {
@@ -34,6 +35,7 @@ export interface NextActivityResponse {
     kind: ActivityKind;
     conceptId?: string;
     skillId?: string;
+    cycleStage?: ConceptCycleStage;
     targetDifficulty?: number;
     rationale: string;
   };
@@ -47,6 +49,7 @@ export interface SelectFormatResponse {
   rationale: string;
   fallbackFormats: Format[];
   masteryStage: MasteryStage;
+  cycleStage?: ConceptCycleStage;
   learningObject: LearningObject;
   events: string[];
 }
@@ -55,6 +58,7 @@ export interface SubmitAnswerResponse {
   evidence: AssessmentEvidence;
   state: MasteryState | null;
   stage: MasteryStage | null;
+  cycleState?: { stage: ConceptCycleStage } | null;
   events: string[];
 }
 
@@ -64,6 +68,7 @@ export interface MasteryResponse {
   memoryRetention: number;
   stage: MasteryStage;
   isDue: boolean;
+  cycleStage?: ConceptCycleStage | null;
 }
 
 export interface EvidenceResponse {
@@ -71,6 +76,7 @@ export interface EvidenceResponse {
   retrievability: number;
   stage: MasteryStage;
   isDue: boolean;
+  cycleState?: { stage: ConceptCycleStage } | null;
   events: string[];
 }
 

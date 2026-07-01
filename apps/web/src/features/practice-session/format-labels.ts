@@ -15,6 +15,9 @@ export const FORMAT_LABELS: Record<Format, string> = {
   project_task: 'Mini-projet',
   spaced_review: 'Révision espacée',
   contrastive_remediation: 'Remédiation contrastive',
+  activation_probe: 'Question d’activation',
+  generation_exercise: 'Génération (vos mots)',
+  transfer_probe: 'Transfert (contexte nouveau)',
 };
 
 export const INTENT_LABELS: Record<string, string> = {

@@ -18,11 +18,13 @@
     "@unisson/learner-modeling": "*",
     "@unisson/persistence": "*",
     "@unisson/shared-kernel": "*",
+    "@unisson/identity": "*",
     "reflect-metadata": "*",
     "rxjs": "*"
   },
   "devDependencies": {
     "@nestjs/testing": "*",
+    "@types/express": "^5",
     "@types/supertest": "*",
     "supertest": "*"
   }

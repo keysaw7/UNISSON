@@ -6,6 +6,13 @@ export interface GoalConstraints {
   preferredFormats?: string[];
 }
 
+/** Critères de réussite explicites (PEDAGOG § phase 1). */
+export interface SuccessCriterion {
+  id: string;
+  description: string;
+  measurable: boolean;
+}
+
 /**
  * Objectif structuré (§6.1) — la CIBLE exploitable dans le graphe, produite par le
  * moteur (pas par l'IA). `targetSkills` = frontière cible pour le Planner.
@@ -22,6 +29,8 @@ export interface StructuredGoal {
   /** Confiance du parsing (0..1) : sous un seuil, le moteur exige des clarifications. */
   confidence: number;
   clarificationsNeeded: string[];
+  /** Critères de réussite dérivés de l'objectif (phase 1 PEDAGOG). */
+  successCriteria?: SuccessCriterion[];
 }
 
 /** Seuil en-dessous duquel le moteur considère l'objectif ambigu. */

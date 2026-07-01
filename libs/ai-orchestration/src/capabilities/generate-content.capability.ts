@@ -20,13 +20,27 @@ export interface GeneratedContent {
 const PROMPT_VERSION = 'v1';
 
 function buildPrompt(request: ContentRequest): string {
+  const variantLine =
+    request.contextVariant !== undefined ? `contextVariant: ${request.contextVariant}` : '';
+  const formatHint =
+    request.format === 'activation_probe'
+      ? 'Pose UNE question de rappel ou de prédiction (sans exposer le contenu). Pas de leçon.'
+      : request.format === 'generation_exercise'
+        ? 'Demandez à l\'apprenant d\'expliquer avec ses propres mots ou de créer un exemple.'
+        : request.format === 'transfer_probe'
+          ? 'Proposez une situation ou formulation NOUVELLE jamais vue pour tester le transfert.'
+          : '';
   return [
     'Génère un contenu pédagogique pour l’item suivant. Réponds en JSON strict avec les clés :',
     'body (string, le contenu), title (string, optionnel).',
     `targetRef: ${request.targetRef}`,
     `format: ${request.format}`,
     `difficulty: ${request.difficulty}`,
-  ].join('\n');
+    variantLine,
+    formatHint,
+  ]
+    .filter(Boolean)
+    .join('\n');
 }
 
 function parse(rawText: string): ValidationResult<GeneratedContent> {
@@ -51,7 +65,7 @@ export class GenerateContentCapability {
     return this.gateway.execute({
       name: 'generate_content',
       promptVersion: PROMPT_VERSION,
-      cacheKeySeed: `${request.targetRef}:${request.format}:${request.difficulty}`,
+      cacheKeySeed: `${request.targetRef}:${request.format}:${request.difficulty}:${request.contextVariant ?? 0}`,
       buildPrompt: () => buildPrompt(request),
       buildRepairPrompt: (previous, errors) =>
         [

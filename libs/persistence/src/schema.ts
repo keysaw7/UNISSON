@@ -9,6 +9,12 @@ import { boolean, doublePrecision, index, integer, jsonb, pgTable, primaryKey, t
  * adapters mémoire, pas de dérive de fuseau). Les IDs typés (branded) sont des `text`.
  */
 
+// ── Identity ─────────────────────────────────────────────────────────────────────
+export const learner = pgTable('learner', {
+  id: text('id').primaryKey(),
+  createdAt: text('created_at').notNull(),
+});
+
 // ── Knowledge Graph ────────────────────────────────────────────────────────────
 export const skill = pgTable('skill', {
   id: text('id').primaryKey(),
@@ -71,6 +77,21 @@ export const evidenceEvent = pgTable(
   (t) => [index('evidence_by_learner_concept').on(t.learnerId, t.conceptId, t.occurredAt)],
 );
 
+// ── Content (Learning Objects) ────────────────────────────────────────────────────
+export const learningObject = pgTable(
+  'learning_object',
+  {
+    id: text('id').primaryKey(),
+    targetRef: text('target_ref').notNull(),
+    format: text('format').notNull(),
+    difficulty: doublePrecision('difficulty').notNull(),
+    contentRef: text('content_ref').notNull(),
+    provider: text('provider').notNull(),
+    createdAt: text('created_at').notNull(),
+  },
+  (t) => [index('learning_object_lookup').on(t.targetRef, t.format, t.difficulty)],
+);
+
 // ── Cross-cutting : outbox + journal (§12.3, §12.7) ──────────────────────────────
 export const outbox = pgTable(
   'outbox',
@@ -88,6 +109,19 @@ export const outbox = pgTable(
     publishedAt: text('published_at'),
   },
   (t) => [index('outbox_unpublished').on(t.publishedAt, t.seq)],
+);
+
+// ── Goal Intake (Learning Engine) ────────────────────────────────────────────────
+export const goal = pgTable(
+  'goal',
+  {
+    id: text('id').primaryKey(),
+    learnerId: text('learner_id').notNull(),
+    domain: text('domain').notNull(),
+    goal: jsonb('goal').$type<unknown>().notNull(),
+    createdAt: text('created_at').notNull(),
+  },
+  (t) => [index('goal_by_learner').on(t.learnerId, t.createdAt)],
 );
 
 // ── Planning (Learning Engine) ───────────────────────────────────────────────────
@@ -145,16 +179,45 @@ export const domainEvent = pgTable('domain_event', {
   payload: jsonb('payload').$type<unknown>().notNull(),
 });
 
+// ── Concept Learning Cycle (Learning Engine) ─────────────────────────────────────
+export const conceptLearningCycle = pgTable(
+  'concept_learning_cycle',
+  {
+    learnerId: text('learner_id').notNull(),
+    conceptId: text('concept_id').notNull(),
+    skillId: text('skill_id').notNull(),
+    stage: text('stage').notNull(),
+    consecutiveSuccesses: integer('consecutive_successes').notNull(),
+    updatedAt: text('updated_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.learnerId, t.conceptId] })],
+);
+
+export const skillActivation = pgTable(
+  'skill_activation',
+  {
+    learnerId: text('learner_id').notNull(),
+    skillId: text('skill_id').notNull(),
+    activatedAt: text('activated_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.learnerId, t.skillId] })],
+);
+
 export const schema = {
+  learner,
   skill,
   concept,
   skillPrerequisite,
   skillConcept,
   masteryState,
   evidenceEvent,
+  goal,
   learningPlan,
   diagnosticSession,
   formatEfficacy,
+  learningObject,
+  conceptLearningCycle,
+  skillActivation,
   outbox,
   domainEvent,
 };
