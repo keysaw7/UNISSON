@@ -6,4 +6,5 @@ export * from './adapters/pg-knowledge-graph.repository';
 export * from './adapters/pg-learner-state.repository';
 export * from './adapters/pg-plan.repository';
 export * from './adapters/pg-diagnostic-session.repository';
+export * from './adapters/pg-format-efficacy.repository';
 export * from './adapters/pg-outbox';

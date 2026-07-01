@@ -26,17 +26,26 @@ import {
   type MasteryModel,
 } from '@unisson/learner-modeling';
 import {
+  ConstrainedBanditFormatSelector,
   CreatePlanUseCase,
   DIAGNOSTIC_SESSION_REPOSITORY_PORT,
+  FORMAT_EFFICACY_REPOSITORY_PORT,
+  FORMAT_SELECTION_STRATEGY_PORT,
   InMemoryDiagnosticSessionRepository,
+  InMemoryFormatEfficacyRepository,
   InMemoryPlanRepository,
   NextActivityUseCase,
   PLAN_REPOSITORY_PORT,
   PLANNER_STRATEGY_PORT,
+  RecordFormatEfficacyUseCase,
+  RuleBasedFormatSelector,
+  SelectFormatUseCase,
   StartDiagnosticUseCase,
   SubmitDiagnosticAnswerUseCase,
   WeightedGreedyPlanner,
   type DiagnosticSessionRepositoryPort,
+  type FormatEfficacyRepositoryPort,
+  type FormatSelectionStrategyPort,
   type PlannerStrategyPort,
   type PlanRepositoryPort,
 } from '@unisson/learning-engine';
@@ -49,11 +58,14 @@ import {
   type GradingStrategyPort,
   type MisconceptionCatalogPort,
 } from '@unisson/assessment';
+import { CONTENT_GENERATOR_PORT, type ContentGeneratorPort } from '@unisson/content';
+import { AiContentGeneratorAdapter, LLM_PORT, StubLlmAdapter, type LLMPort } from '@unisson/ai-orchestration';
 import {
   createDb,
   createPool,
   PgEventJournal,
   PgEvidenceRepository,
+  PgFormatEfficacyRepository,
   PgKnowledgeGraphRepository,
   PgDiagnosticSessionRepository,
   PgLearnerStateRepository,
@@ -206,6 +218,39 @@ const providers: Provider[] = [
       new SeedInitialStateUseCase(state, model),
     inject: [LEARNER_STATE_REPOSITORY_PORT, INFRA.MasteryModel],
   },
+  { provide: LLM_PORT, useClass: StubLlmAdapter },
+  {
+    provide: CONTENT_GENERATOR_PORT,
+    useFactory: (llm: LLMPort): ContentGeneratorPort => new AiContentGeneratorAdapter(llm),
+    inject: [LLM_PORT],
+  },
+  {
+    provide: FORMAT_EFFICACY_REPOSITORY_PORT,
+    useFactory: (db: Db | null): FormatEfficacyRepositoryPort =>
+      db ? new PgFormatEfficacyRepository(db) : new InMemoryFormatEfficacyRepository(),
+    inject: [INFRA.Db],
+  },
+  {
+    provide: FORMAT_SELECTION_STRATEGY_PORT,
+    useFactory: (efficacy: FormatEfficacyRepositoryPort): FormatSelectionStrategyPort =>
+      new ConstrainedBanditFormatSelector(new RuleBasedFormatSelector(), efficacy),
+    inject: [FORMAT_EFFICACY_REPOSITORY_PORT],
+  },
+  {
+    provide: SelectFormatUseCase,
+    useFactory: (
+      strategy: FormatSelectionStrategyPort,
+      contentGenerator: ContentGeneratorPort,
+      outbox: OutboxPort,
+    ): SelectFormatUseCase => new SelectFormatUseCase(strategy, contentGenerator, outbox),
+    inject: [FORMAT_SELECTION_STRATEGY_PORT, CONTENT_GENERATOR_PORT, INFRA.Outbox],
+  },
+  {
+    provide: RecordFormatEfficacyUseCase,
+    useFactory: (efficacy: FormatEfficacyRepositoryPort, outbox: OutboxPort): RecordFormatEfficacyUseCase =>
+      new RecordFormatEfficacyUseCase(efficacy, outbox),
+    inject: [FORMAT_EFFICACY_REPOSITORY_PORT, INFRA.Outbox],
+  },
 ];
 
 @Global()
@@ -232,6 +277,12 @@ const providers: Provider[] = [
     StartDiagnosticUseCase,
     SubmitDiagnosticAnswerUseCase,
     SeedInitialStateUseCase,
+    LLM_PORT,
+    CONTENT_GENERATOR_PORT,
+    FORMAT_EFFICACY_REPOSITORY_PORT,
+    FORMAT_SELECTION_STRATEGY_PORT,
+    SelectFormatUseCase,
+    RecordFormatEfficacyUseCase,
   ],
 })
 export class InfraModule {}

@@ -10,6 +10,9 @@ export class StubLlmAdapter implements LLMPort {
     if (request.capability === 'parse_goal') {
       return { text: JSON.stringify(this.fakeParseGoal(request.prompt)) };
     }
+    if (request.capability === 'generate_content') {
+      return { text: JSON.stringify(this.fakeGenerateContent(request.prompt)) };
+    }
     return { text: '{}' };
   }
 
@@ -43,6 +46,19 @@ export class StubLlmAdapter implements LLMPort {
       constraints: {},
       confidence: 0.4,
       clarificationsNeeded: [],
+    };
+  }
+
+  /** Simule `generate_content` : extrait les paramètres du prompt et produit un corps déterministe. */
+  private fakeGenerateContent(prompt: string): unknown {
+    const extract = (key: string): string => prompt.match(new RegExp(`^${key}: (.*)$`, 'm'))?.[1]?.trim() ?? '';
+    const targetRef = extract('targetRef') || 'concept';
+    const format = extract('format') || 'explanation';
+    const difficulty = extract('difficulty') || '0.5';
+
+    return {
+      title: `${format} — ${targetRef}`,
+      body: `[stub] contenu « ${format} » pour « ${targetRef} » (difficulté ${difficulty}).`,
     };
   }
 }

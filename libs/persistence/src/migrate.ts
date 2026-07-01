@@ -92,6 +92,15 @@ CREATE TABLE IF NOT EXISTS diagnostic_session (
 );
 CREATE INDEX IF NOT EXISTS diagnostic_by_learner ON diagnostic_session (learner_id, updated_at);
 
+CREATE TABLE IF NOT EXISTS format_efficacy (
+  format_type text NOT NULL,
+  concept_type text NOT NULL,
+  stability_gain_per_minute double precision NOT NULL,
+  observations integer NOT NULL,
+  retention_at_days jsonb NOT NULL,
+  PRIMARY KEY (format_type, concept_type)
+);
+
 CREATE TABLE IF NOT EXISTS domain_event (
   event_id text PRIMARY KEY,
   type text NOT NULL,

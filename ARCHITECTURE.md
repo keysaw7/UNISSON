@@ -2052,6 +2052,28 @@ Format : `ADR-NNN — Titre` · Statut · Contexte · Décision · Conséquences
   imparfait mais rapide, auto-corrigé — différenciateur vs tests de placement interminables. IRT
   complet ultérieur derrière les mêmes fonctions/ports (recalibration hors-ligne).
 
+### ADR-049 — Format Selector : plancher de règles (B) + bandit CONTRAINT à la bande (C)
+- **Statut :** ✅ Accepté (Phase 3)
+- **Contexte :** La 6e décision du moteur, « sous quelle forme » (§6.5) : le bon format dépend de
+  l'**intention** pédagogique et du **stade de maîtrise**, pas seulement du concept.
+- **Décision :** `RuleBasedFormatSelector` (approche B, domaine pur) encode la progression
+  pédagogique (unknown→exposition, emerging→reconnaissance, developing→rappel/production,
+  proficient→révision espacée, mastered→application ; misconception→remédiation contrastive
+  toujours prioritaire) et applique faisabilité (pas de *speaking* sans micro, formats courts si peu
+  de temps/fatigue) + variété (anti-monotonie). C'est le **plancher de sécurité** : jamais vide,
+  jamais « rappel avant exposition ». `ConstrainedBanditFormatSelector` (approche C, adapter) explore
+  en epsilon-greedy **uniquement dans la bande valide** renvoyée par B (`format` + `fallbackFormats`),
+  pondéré par `FormatEfficacyStat.stabilityGainPerMinute` — la vraie métrique **long terme** (pas le
+  score immédiat, qui favoriserait la facilité). Cold start (aucune donnée) → retombe sur B.
+  `SelectFormatUseCase` orchestre : stratégie → format abstrait, puis `ContentGeneratorPort` (AI
+  Gateway, capacité `generate_content` + `StubLlmAdapter`) → contenu concret. Décision (moteur) ≠
+  production (IA), jamais mélangées.
+- **Conséquences :** `FormatEfficacyRepositoryPort` (mémoire/PG) persiste une moyenne incrémentale
+  par (format, type de concept), alimentée par `RecordFormatEfficacyUseCase` au fil des observations
+  réelles. Le bandit ne peut **jamais** sortir de la bande pédagogique — sécurité avant optimisation
+  empirique. `generate_content` est la 2e capability de l'AI Gateway (après `parse_goal`), même
+  pipeline validation Zod ; un vrai fournisseur LLM se substituera au stub sans toucher au domaine.
+
 ---
 
 ## 19. Questions ouvertes / à approfondir
@@ -2121,10 +2143,19 @@ Format : `ADR-NNN — Titre` · Statut · Contexte · Décision · Conséquences
       `DiagnosticItemAnswered`/`DiagnosticCompleted`/`InitialStateEstimated`. Session persistée
       (mémoire/PG). API `POST /learners/:id/diagnostic` + `/:sessionId` sème les priors dans la
       maîtrise (`SeedInitialStateUseCase`, sans écraser l'existant). Validé in-memory **et** Postgres
-      réel (73 tests). *(ADR-048)*
+      réel. *(ADR-048)*
+- [x] **Format Selector** (§6.5) : `RuleBasedFormatSelector` (règles pédagogiques, plancher de
+      sécurité) + `ConstrainedBanditFormatSelector` (epsilon-greedy DANS la bande valide, pondéré
+      par l'efficacité mesurée = gain de stabilité/minute, jamais le score immédiat). Capacité IA
+      `generate_content` (2e capability de l'AI Gateway) produit le contenu concret via
+      `ContentGeneratorPort`. `FormatSelected`/`FormatEfficacyRecorded`. API `POST /learners/:id/format`
+      + `POST /format-efficacy` + `GET /format-efficacy/:format/:conceptType`. Validé in-memory **et**
+      Postgres réel (89 tests). *(ADR-049)*
 
 **Prochaines étapes (Phase 3) :**
 
-- [ ] Format Selector (règles → bandit contraint) + génération de contenu via AI Gateway (§6.5).
+- [ ] Brancher un vrai fournisseur LLM derrière `LLMPort` (cache sémantique, réparation, télémétrie,
+      prompts versionnés) — remplace `StubLlmAdapter` pour `parse_goal` et `generate_content`.
+- [ ] pgvector (cache sémantique) + relais outbox → Kafka/Redpanda au scale.
 - [ ] Brancher un vrai fournisseur LLM derrière le `LLMPort` (cache, réparation, télémétrie).
 - [ ] pgvector (cache sémantique) + relais outbox → Kafka/Redpanda au scale.

@@ -164,4 +164,37 @@ describe('API (e2e) — walking skeleton', () => {
       .send({ conceptId: 'hiragana-a', correct: true });
     expect(res.status).toBe(404);
   });
+
+  it('Format Selector : choisit un format pédagogiquement valide et génère le contenu (AI Gateway)', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/learners/learner-5/format')
+      .send({ conceptId: 'hiragana-a', skillId: 'hiragana', conceptType: 'kana', intent: 'introduce' });
+
+    expect(res.status).toBe(201);
+    expect(['explanation', 'worked_example']).toContain(res.body.format); // stade "unknown" → exposition
+    expect(res.body.learningObject.format).toBe(res.body.format);
+    expect(res.body.learningObject.contentRef).toContain(res.body.format);
+    expect(res.body.events).toContain('FormatSelected');
+  });
+
+  it('Format Selector : une misconception force la remédiation contrastive', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/learners/learner-5/format')
+      .send({ conceptId: 'particle-wa', skillId: 'sentence', conceptType: 'grammar', hasMisconception: true });
+    expect(res.status).toBe(201);
+    expect(res.body.format).toBe('contrastive_remediation');
+  });
+
+  it('POST /format-efficacy alimente le bandit, GET renvoie la moyenne agrégée', async () => {
+    const rec = await request(app.getHttpServer())
+      .post('/format-efficacy')
+      .send({ formatType: 'cloze', conceptType: 'grammar', stabilityGainPerMinute: 0.3 });
+    expect(rec.status).toBe(201);
+    expect(rec.body.stat.observations).toBe(1);
+    expect(rec.body.events).toContain('FormatEfficacyRecorded');
+
+    const read = await request(app.getHttpServer()).get('/format-efficacy/cloze/grammar');
+    expect(read.status).toBe(200);
+    expect(read.body.stat.stabilityGainPerMinute).toBeCloseTo(0.3, 5);
+  });
 });

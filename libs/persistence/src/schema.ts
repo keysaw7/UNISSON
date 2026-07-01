@@ -120,6 +120,19 @@ export const diagnosticSession = pgTable(
   (t) => [index('diagnostic_by_learner').on(t.learnerId, t.updatedAt)],
 );
 
+// ── Format Selector (Learning Engine) ────────────────────────────────────────────
+export const formatEfficacy = pgTable(
+  'format_efficacy',
+  {
+    formatType: text('format_type').notNull(),
+    conceptType: text('concept_type').notNull(),
+    stabilityGainPerMinute: doublePrecision('stability_gain_per_minute').notNull(),
+    observations: integer('observations').notNull(),
+    retentionAtDays: jsonb('retention_at_days').$type<Record<number, number>>().notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.formatType, t.conceptType] })],
+);
+
 export const domainEvent = pgTable('domain_event', {
   eventId: text('event_id').primaryKey(),
   type: text('type').notNull(),
@@ -141,6 +154,7 @@ export const schema = {
   evidenceEvent,
   learningPlan,
   diagnosticSession,
+  formatEfficacy,
   outbox,
   domainEvent,
 };

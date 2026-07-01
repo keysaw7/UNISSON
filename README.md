@@ -3,9 +3,11 @@
 Moteur d'apprentissage adaptatif. Monolithe **modulaire**, architecture **hexagonale + DDD**,
 découplé des fournisseurs d'IA.
 
-> Conception complète dans [`ARCHITECTURE.md`](./ARCHITECTURE.md) (46 ADR).
-> Ce dépôt implémente les **Phases 1–2** : cœur scientifique Maîtrise+Oubli (FSRS+bayésien), graphe
-> Japonais N5, outbox + journal d'événements, **Curriculum Planner** + **Sequencer**, persistance
+> Conception complète dans [`ARCHITECTURE.md`](./ARCHITECTURE.md) (49 ADR).
+> Ce dépôt implémente les **Phases 1–3** : cœur scientifique Maîtrise+Oubli (FSRS+bayésien), graphe
+> Japonais N5, outbox + journal d'événements, **Curriculum Planner** + **Sequencer**, **Diagnostic
+> adaptatif graph-aware**, **Assessment** (correction + évidence pondérée), **Format Selector**
+> (règles → bandit contraint) avec génération de contenu via l'AI Gateway, persistance
 > Postgres/Drizzle optionnelle.
 
 ## Prérequis
@@ -74,6 +76,13 @@ CID=$(echo "$DIAG" | sed -E 's/.*"conceptId":"([^"]+)".*/\1/')
 # Répondre à l'item courant → MàJ + propagation sur le graphe ; à l'arrêt, priors semés dans la maîtrise
 curl -X POST "http://localhost:3000/learners/learner-1/diagnostic/$SID" -H 'content-type: application/json' \
   -d "{\"conceptId\":\"$CID\",\"correct\":true}"
+# Format Selector : choisit le format (règles → bandit) puis génère le contenu via l'AI Gateway
+curl -X POST http://localhost:3000/learners/learner-1/format -H 'content-type: application/json' \
+  -d '{"conceptId":"hiragana-a","skillId":"hiragana","conceptType":"kana","intent":"introduce"}'
+# Alimente le bandit contraint avec une observation réelle (gain de stabilité/minute)
+curl -X POST http://localhost:3000/format-efficacy -H 'content-type: application/json' \
+  -d '{"formatType":"cloze","conceptType":"grammar","stabilityGainPerMinute":0.3}'
+curl http://localhost:3000/format-efficacy/cloze/grammar
 ```
 
 ## Structure (§17)
@@ -83,12 +92,12 @@ apps/
   api/                 # Composition root NestJS (câble adapters ↔ ports par tokens)
 libs/
   shared-kernel/       # DomainEvent, IDs typés, Result, EventBus, Outbox + journal + relais
-  learning-engine/     # KERNEL : Goal, Diagnostic adaptatif graph-aware, Planner (glouton), Sequencer
+  learning-engine/     # KERNEL : Goal, Diagnostic graph-aware, Planner, Sequencer, Format Selector
   knowledge-graph/     # Concept/Skill, prérequis pondérés, algos (topo, transitif), seed N5
   learner-modeling/    # Maîtrise + Oubli (FSRS+bayésien), EvidenceEvent, RecordEvidenceUseCase
   assessment/          # Correction déterministe/fuzzy, évidence pondérée, taxonomie + misconceptions
-  content/             # Learning Objects, formats
-  ai-orchestration/    # AI Gateway : LLMPort, capability parse_goal (Zod), adapters
+  content/             # Learning Objects, formats, ContentGeneratorPort
+  ai-orchestration/    # AI Gateway : LLMPort, capabilities parse_goal + generate_content (Zod), adapters
   identity/            # IAM (générique)
   persistence/         # Drizzle schema + client PG + adapters (derrière les ports) + migration/seed
 ```

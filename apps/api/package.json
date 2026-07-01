@@ -12,6 +12,7 @@
     "@nestjs/platform-express": "*",
     "@unisson/ai-orchestration": "*",
     "@unisson/assessment": "*",
+    "@unisson/content": "*",
     "@unisson/learning-engine": "*",
     "@unisson/knowledge-graph": "*",
     "@unisson/learner-modeling": "*",
