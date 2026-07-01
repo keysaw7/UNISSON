@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { ParsedGoalDraft } from '@unisson/learning-engine';
-import type { LLMPort } from '../ports/llm.port';
+import { AiGateway, type ValidationResult } from '../gateway/ai-gateway';
 
 /**
  * Schéma de sortie de la capacité `parse_goal` (§10.3). Toute réponse du modèle est
@@ -22,15 +22,9 @@ const ParseGoalOutputSchema = z.object({
   clarificationsNeeded: z.array(z.string()).default([]),
 });
 
-export class SchemaValidationError extends Error {
-  constructor(capability: string, details: string) {
-    super(`Sortie IA invalide pour "${capability}": ${details}`);
-    this.name = 'SchemaValidationError';
-  }
-}
+const PROMPT_VERSION = 'v1';
 
 function buildPrompt(rawStatement: string): string {
-  // Prompt volontairement minimal en Phase 0 (le Prompt Store versionné viendra ensuite).
   return [
     'Extrais un objectif d’apprentissage structuré au format JSON strict avec les clés:',
     'domain, targetSkills[], targetLevel, motivation?, constraints{}, confidence(0..1), clarificationsNeeded[].',
@@ -38,35 +32,39 @@ function buildPrompt(rawStatement: string): string {
   ].join('\n');
 }
 
+function parse(rawText: string): ValidationResult<ParsedGoalDraft> {
+  let json: unknown;
+  try {
+    json = JSON.parse(rawText);
+  } catch {
+    return { success: false, errors: 'réponse non-JSON' };
+  }
+  const parsed = ParseGoalOutputSchema.safeParse(json);
+  if (!parsed.success) {
+    return { success: false, errors: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ') };
+  }
+  return { success: true, data: parsed.data };
+}
+
+/** Capacité `parse_goal` (§6.1, §10.3) : ne décrit QUE prompt + schéma ; le Gateway orchestre le reste. */
 export class ParseGoalCapability {
-  constructor(private readonly llm: LLMPort) {}
+  constructor(private readonly gateway: AiGateway) {}
 
-  async run(rawStatement: string): Promise<ParsedGoalDraft> {
-    const response = await this.llm.complete({
-      capability: 'parse_goal',
-      prompt: buildPrompt(rawStatement),
+  run(rawStatement: string): Promise<ParsedGoalDraft> {
+    return this.gateway.execute({
+      name: 'parse_goal',
+      promptVersion: PROMPT_VERSION,
+      cacheKeySeed: rawStatement.trim().toLowerCase(),
+      buildPrompt: () => buildPrompt(rawStatement),
+      buildRepairPrompt: (previous, errors) =>
+        [
+          buildPrompt(rawStatement),
+          `Ta réponse précédente était invalide : ${previous}`,
+          `Erreurs : ${errors}`,
+          'Corrige et renvoie UNIQUEMENT le JSON valide.',
+        ].join('\n'),
+      parse,
+      cacheTtlSeconds: 60 * 60 * 24, // 1 jour : un objectif reformulé identique peut être resservi
     });
-
-    let json: unknown;
-    try {
-      json = JSON.parse(response.text);
-    } catch {
-      throw new SchemaValidationError('parse_goal', 'réponse non-JSON');
-    }
-
-    const parsed = ParseGoalOutputSchema.safeParse(json);
-    if (!parsed.success) {
-      throw new SchemaValidationError('parse_goal', parsed.error.issues.map((i) => i.message).join('; '));
-    }
-
-    return {
-      domain: parsed.data.domain,
-      targetSkills: parsed.data.targetSkills,
-      targetLevel: parsed.data.targetLevel,
-      motivation: parsed.data.motivation,
-      constraints: parsed.data.constraints,
-      confidence: parsed.data.confidence,
-      clarificationsNeeded: parsed.data.clarificationsNeeded,
-    };
   }
 }

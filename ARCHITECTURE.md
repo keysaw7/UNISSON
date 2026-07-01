@@ -3,8 +3,8 @@
 > **Document vivant.** Il capture le contexte, les décisions et la conception au fil de l'eau.
 > On l'alimente à chaque étape. Rien ici n'est « du code » : c'est la réflexion d'architecture.
 
-**Dernière mise à jour :** 2026-07-01 — Scaffolding Phase 0 réalisé (ADR-040) — code initial en place
-**Statut :** Conception complète (46 ADR) + **Phases 1–2 implémentées** : cœur scientifique Maîtrise+Oubli (FSRS+bayésien), graphe Japonais N5, outbox + journal d'événements, **Curriculum Planner** (glouton pondéré) + **Sequencer** (piloté par la rétrievabilité), persistance Postgres/Drizzle optionnelle derrière les ports (51 tests verts, in-memory **et** Postgres réel). Voir `README.md`.
+**Dernière mise à jour :** 2026-07-01 — AI Gateway opérationnel (ADR-050) — cache + réparation + fallback + télémétrie, fournisseur Anthropic réel derrière `LLMPort`
+**Statut :** Conception complète (50 ADR) + **Phases 1–3 implémentées** : cœur scientifique Maîtrise+Oubli (FSRS+bayésien), graphe Japonais N5, outbox + journal d'événements, **Curriculum Planner** (glouton pondéré) + **Sequencer** (piloté par la rétrievabilité), **Diagnostic adaptatif graph-aware**, **Assessment** (correction + évidence pondérée), **Format Selector** (règles → bandit contraint), **AI Gateway** générique avec fournisseur LLM réel optionnel, persistance Postgres/Drizzle optionnelle derrière les ports (99 tests, verts in-memory **et** Postgres réel — 1 test d'intégration Anthropic sauté sans `ANTHROPIC_API_KEY`). Voir `README.md`.
 
 ---
 
@@ -2074,6 +2074,30 @@ Format : `ADR-NNN — Titre` · Statut · Contexte · Décision · Conséquences
   empirique. `generate_content` est la 2e capability de l'AI Gateway (après `parse_goal`), même
   pipeline validation Zod ; un vrai fournisseur LLM se substituera au stub sans toucher au domaine.
 
+### ADR-050 — AI Gateway générique (cache + réparation + fallback + télémétrie) et premier vrai fournisseur
+
+- **Statut :** ✅ Accepté (Phase 3)
+- **Contexte :** Les deux capabilities (`parse_goal`, `generate_content`) dupliquaient chacune leur
+  propre parsing JSON + validation. Rien n'implémentait encore le cache, la boucle de réparation, le
+  fallback de modèle ni la télémétrie décrits en §10.2/§10.5/§10.6 — et `StubLlmAdapter` restait le
+  seul `LLMPort` possible, y compris en configuration réelle.
+- **Décision :** Une classe `AiGateway` unique porte TOUTE la logique transverse : chaque capability
+  ne fournit qu'une `CapabilityDefinition` déclarative (nom, version de prompt, prompt, schéma de
+  sortie, prompt de réparation). Le Gateway (1) vérifie le **cache** (clé = hash(capacité + version
+  de prompt + entrée normalisée), ADR-011), (2) appelle le modèle, (3) **valide** la sortie, (4) si
+  invalide, **répare** (re-ask avec les erreurs, jusqu'à `maxRepairAttempts`), (5) si le modèle
+  primaire échoue (erreur réseau/HTTP), bascule sur un modèle de **secours** si fourni, (6) logue
+  systématiquement capacité/latence/tentatives/validité/cache-hit via `TelemetryPort`. `LLMPort` gagne
+  un premier adapter réel, `AnthropicLlmAdapter` (API Messages, transport HTTP pur — aucune logique
+  métier). `InfraModule` bascule automatiquement : `ANTHROPIC_API_KEY` défini → Anthropic en primaire
+  + `StubLlmAdapter` en secours ; sinon → `StubLlmAdapter` seul (dev/CI, comme Postgres vs. mémoire).
+- **Conséquences :** Ajouter une 3e capability ne demandera plus de ré-écrire cache/réparation/
+  télémétrie — seulement prompt + schéma. Ajouter un 2e fournisseur (§10.7) = un nouvel adapter
+  `LLMPort` + une ligne dans la factory `InfraModule`, zéro ligne dans le domaine ni les capabilities.
+  Le cache reste **exact** pour l'instant (le sémantique/pgvector est une extension future du même
+  `CachePort`, cf. roadmap). Un test d'intégration réel (`anthropic-llm.adapter.integration.test.ts`)
+  est sauté sans `ANTHROPIC_API_KEY` — la CI reste verte sans clé, comme pour Postgres.
+
 ---
 
 ## 19. Questions ouvertes / à approfondir
@@ -2152,10 +2176,14 @@ Format : `ADR-NNN — Titre` · Statut · Contexte · Décision · Conséquences
       + `POST /format-efficacy` + `GET /format-efficacy/:format/:conceptType`. Validé in-memory **et**
       Postgres réel (89 tests). *(ADR-049)*
 
+- [x] **AI Gateway opérationnel** (§10.2, §10.5, §10.6) : `AiGateway` générique (cache exact,
+      boucle de réparation avec re-ask, fallback de modèle, télémétrie) partagé par toutes les
+      capacités — `parse_goal` et `generate_content` ne décrivent plus QUE prompt + schéma.
+      `AnthropicLlmAdapter` (vrai fournisseur derrière `LLMPort`, bascule automatique si
+      `ANTHROPIC_API_KEY` est défini, sinon `StubLlmAdapter` en secours et par défaut en dev/CI —
+      même bascule que Postgres vs. mémoire). *(ADR-050)*
+
 **Prochaines étapes (Phase 3) :**
 
-- [ ] Brancher un vrai fournisseur LLM derrière `LLMPort` (cache sémantique, réparation, télémétrie,
-      prompts versionnés) — remplace `StubLlmAdapter` pour `parse_goal` et `generate_content`.
-- [ ] pgvector (cache sémantique) + relais outbox → Kafka/Redpanda au scale.
-- [ ] Brancher un vrai fournisseur LLM derrière le `LLMPort` (cache, réparation, télémétrie).
-- [ ] pgvector (cache sémantique) + relais outbox → Kafka/Redpanda au scale.
+- [ ] Cache **sémantique** (similarité d'embeddings, pgvector) en complément du cache exact déjà
+      en place ; relais outbox → Kafka/Redpanda au scale.

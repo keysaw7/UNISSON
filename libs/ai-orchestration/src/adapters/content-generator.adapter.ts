@@ -1,6 +1,6 @@
 import { makeId } from '@unisson/shared-kernel';
 import type { ContentGeneratorPort, ContentRequest, LearningObject } from '@unisson/content';
-import type { LLMPort } from '../ports/llm.port';
+import type { AiGateway } from '../gateway/ai-gateway';
 import { GenerateContentCapability } from '../capabilities/generate-content.capability';
 
 /**
@@ -10,8 +10,8 @@ import { GenerateContentCapability } from '../capabilities/generate-content.capa
 export class AiContentGeneratorAdapter implements ContentGeneratorPort {
   private readonly capability: GenerateContentCapability;
 
-  constructor(llm: LLMPort) {
-    this.capability = new GenerateContentCapability(llm);
+  constructor(gateway: AiGateway) {
+    this.capability = new GenerateContentCapability(gateway);
   }
 
   async generate(request: ContentRequest): Promise<LearningObject> {

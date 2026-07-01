@@ -3,12 +3,12 @@
 Moteur d'apprentissage adaptatif. Monolithe **modulaire**, architecture **hexagonale + DDD**,
 découplé des fournisseurs d'IA.
 
-> Conception complète dans [`ARCHITECTURE.md`](./ARCHITECTURE.md) (49 ADR).
+> Conception complète dans [`ARCHITECTURE.md`](./ARCHITECTURE.md) (50 ADR).
 > Ce dépôt implémente les **Phases 1–3** : cœur scientifique Maîtrise+Oubli (FSRS+bayésien), graphe
 > Japonais N5, outbox + journal d'événements, **Curriculum Planner** + **Sequencer**, **Diagnostic
 > adaptatif graph-aware**, **Assessment** (correction + évidence pondérée), **Format Selector**
-> (règles → bandit contraint) avec génération de contenu via l'AI Gateway, persistance
-> Postgres/Drizzle optionnelle.
+> (règles → bandit contraint) avec génération de contenu via l'**AI Gateway** (cache, réparation,
+> fallback, télémétrie ; fournisseur Anthropic optionnel), persistance Postgres/Drizzle optionnelle.
 
 ## Prérequis
 
@@ -41,6 +41,23 @@ npm run db:up                   # docker compose : Postgres 16
 npm run db:setup                # migre le schéma + charge le graphe Japonais N5
 DATABASE_URL=postgres://unisson:unisson@localhost:5432/unisson npm test   # inclut l'intégration PG
 ```
+
+### Fournisseur LLM (optionnel)
+
+Sans `ANTHROPIC_API_KEY`, l'AI Gateway utilise `StubLlmAdapter` (déterministe, dev/CI). Avec la clé,
+`AnthropicLlmAdapter` devient le fournisseur **primaire** derrière `LLMPort` (le stub reste en
+secours automatique) — même bascule que Postgres vs. mémoire, sans rien changer au domaine :
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+export ANTHROPIC_MODEL=claude-3-5-haiku-20241022   # optionnel, valeur par défaut déjà sensée
+ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY npm test -w @unisson/ai-orchestration   # inclut l'intégration réelle
+npm run start:api
+```
+
+Le Gateway (`AiGateway`, §10.2) ajoute par-dessus n'importe quel fournisseur : cache exact,
+boucle de réparation (re-ask si la sortie ne respecte pas le schéma Zod), fallback de modèle,
+et télémétrie structurée par capacité.
 
 ### Essayer l'API
 
@@ -97,7 +114,8 @@ libs/
   learner-modeling/    # Maîtrise + Oubli (FSRS+bayésien), EvidenceEvent, RecordEvidenceUseCase
   assessment/          # Correction déterministe/fuzzy, évidence pondérée, taxonomie + misconceptions
   content/             # Learning Objects, formats, ContentGeneratorPort
-  ai-orchestration/    # AI Gateway : LLMPort, capabilities parse_goal + generate_content (Zod), adapters
+  ai-orchestration/    # AI Gateway : LLMPort, AiGateway (cache/réparation/fallback/télémétrie),
+                       #   capabilities parse_goal + generate_content (Zod), adapters (stub, Anthropic)
   identity/            # IAM (générique)
   persistence/         # Drizzle schema + client PG + adapters (derrière les ports) + migration/seed
 ```

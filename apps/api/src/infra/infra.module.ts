@@ -59,7 +59,21 @@ import {
   type MisconceptionCatalogPort,
 } from '@unisson/assessment';
 import { CONTENT_GENERATOR_PORT, type ContentGeneratorPort } from '@unisson/content';
-import { AiContentGeneratorAdapter, LLM_PORT, StubLlmAdapter, type LLMPort } from '@unisson/ai-orchestration';
+import {
+  AI_GATEWAY,
+  AiContentGeneratorAdapter,
+  AiGateway,
+  AnthropicLlmAdapter,
+  CACHE_PORT,
+  ConsoleTelemetryAdapter,
+  InMemoryCache,
+  LLM_PORT,
+  StubLlmAdapter,
+  TELEMETRY_PORT,
+  type CachePort,
+  type LLMPort,
+  type TelemetryPort,
+} from '@unisson/ai-orchestration';
 import {
   createDb,
   createPool,
@@ -218,11 +232,31 @@ const providers: Provider[] = [
       new SeedInitialStateUseCase(state, model),
     inject: [LEARNER_STATE_REPOSITORY_PORT, INFRA.MasteryModel],
   },
-  { provide: LLM_PORT, useClass: StubLlmAdapter },
+  {
+    // Fournisseur réel derrière `LLMPort` si `ANTHROPIC_API_KEY` est défini, sinon le stub
+    // déterministe (dev/CI) — même bascule que Postgres vs. mémoire (§17.2). Changer de
+    // fournisseur = changer cette seule factory ; rien d'autre dans le système ne bouge (§10.7).
+    provide: LLM_PORT,
+    useFactory: (): LLMPort =>
+      process.env.ANTHROPIC_API_KEY
+        ? new AnthropicLlmAdapter({ apiKey: process.env.ANTHROPIC_API_KEY, model: process.env.ANTHROPIC_MODEL })
+        : new StubLlmAdapter(),
+  },
+  { provide: CACHE_PORT, useFactory: (): CachePort => new InMemoryCache() },
+  { provide: TELEMETRY_PORT, useFactory: (): TelemetryPort => new ConsoleTelemetryAdapter() },
+  {
+    // AI Gateway (§10.2) : cache + validation + boucle de réparation + fallback + télémétrie,
+    // partagé par toutes les capacités (`parse_goal`, `generate_content`, …). Le stub sert de
+    // modèle de secours quand un vrai fournisseur est actif, pour ne jamais bloquer le domaine.
+    provide: AI_GATEWAY,
+    useFactory: (llm: LLMPort, cache: CachePort, telemetry: TelemetryPort): AiGateway =>
+      new AiGateway(llm, cache, telemetry, process.env.ANTHROPIC_API_KEY ? new StubLlmAdapter() : undefined),
+    inject: [LLM_PORT, CACHE_PORT, TELEMETRY_PORT],
+  },
   {
     provide: CONTENT_GENERATOR_PORT,
-    useFactory: (llm: LLMPort): ContentGeneratorPort => new AiContentGeneratorAdapter(llm),
-    inject: [LLM_PORT],
+    useFactory: (gateway: AiGateway): ContentGeneratorPort => new AiContentGeneratorAdapter(gateway),
+    inject: [AI_GATEWAY],
   },
   {
     provide: FORMAT_EFFICACY_REPOSITORY_PORT,
@@ -278,6 +312,7 @@ const providers: Provider[] = [
     SubmitDiagnosticAnswerUseCase,
     SeedInitialStateUseCase,
     LLM_PORT,
+    AI_GATEWAY,
     CONTENT_GENERATOR_PORT,
     FORMAT_EFFICACY_REPOSITORY_PORT,
     FORMAT_SELECTION_STRATEGY_PORT,

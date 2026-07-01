@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import type { ContentRequest } from '@unisson/content';
-import type { LLMPort } from '../ports/llm.port';
-import { SchemaValidationError } from './parse-goal.capability';
+import { AiGateway, type ValidationResult } from '../gateway/ai-gateway';
 
 /**
  * Schéma de sortie de la capacité `generate_content` (§6.5, §10.3). Le Format Selector décide de
@@ -13,6 +12,13 @@ const GenerateContentOutputSchema = z.object({
   title: z.string().optional(),
 });
 
+export interface GeneratedContent {
+  body: string;
+  title?: string;
+}
+
+const PROMPT_VERSION = 'v1';
+
 function buildPrompt(request: ContentRequest): string {
   return [
     'Génère un contenu pédagogique pour l’item suivant. Réponds en JSON strict avec les clés :',
@@ -23,23 +29,39 @@ function buildPrompt(request: ContentRequest): string {
   ].join('\n');
 }
 
+function parse(rawText: string): ValidationResult<GeneratedContent> {
+  let json: unknown;
+  try {
+    json = JSON.parse(rawText);
+  } catch {
+    return { success: false, errors: 'réponse non-JSON' };
+  }
+  const parsed = GenerateContentOutputSchema.safeParse(json);
+  if (!parsed.success) {
+    return { success: false, errors: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ') };
+  }
+  return { success: true, data: parsed.data };
+}
+
+/** Capacité `generate_content` (§6.5, §10.3) : ne décrit QUE prompt + schéma ; le Gateway orchestre le reste. */
 export class GenerateContentCapability {
-  constructor(private readonly llm: LLMPort) {}
+  constructor(private readonly gateway: AiGateway) {}
 
-  async run(request: ContentRequest): Promise<{ body: string; title?: string }> {
-    const response = await this.llm.complete({ capability: 'generate_content', prompt: buildPrompt(request) });
-
-    let json: unknown;
-    try {
-      json = JSON.parse(response.text);
-    } catch {
-      throw new SchemaValidationError('generate_content', 'réponse non-JSON');
-    }
-
-    const parsed = GenerateContentOutputSchema.safeParse(json);
-    if (!parsed.success) {
-      throw new SchemaValidationError('generate_content', parsed.error.issues.map((i) => i.message).join('; '));
-    }
-    return parsed.data;
+  run(request: ContentRequest): Promise<GeneratedContent> {
+    return this.gateway.execute({
+      name: 'generate_content',
+      promptVersion: PROMPT_VERSION,
+      cacheKeySeed: `${request.targetRef}:${request.format}:${request.difficulty}`,
+      buildPrompt: () => buildPrompt(request),
+      buildRepairPrompt: (previous, errors) =>
+        [
+          buildPrompt(request),
+          `Ta réponse précédente était invalide : ${previous}`,
+          `Erreurs : ${errors}`,
+          'Corrige et renvoie UNIQUEMENT le JSON valide.',
+        ].join('\n'),
+      parse,
+      cacheTtlSeconds: 60 * 60 * 24 * 90, // §10.4 : cache sémantique 90j pour generate_exercise-like
+    });
   }
 }
