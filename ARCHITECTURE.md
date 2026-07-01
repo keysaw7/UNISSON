@@ -2017,6 +2017,24 @@ Format : `ADR-NNN — Titre` · Statut · Contexte · Décision · Conséquences
 - **Conséquences :** Séparation nette Planner (macro, rare) / Sequencer (micro, chaque activité) ;
   l'IA n'intervient qu'en aval pour produire le contenu.
 
+### ADR-047 — Assessment : ÉVIDENCE pondérée (pas un verdict), correction par règles d'abord
+- **Statut :** ✅ Accepté (Phase 3)
+- **Contexte :** Fermer la boucle Delivery → **Assessment** → Learner Model (§6.4). Une réponse est
+  un signal bruité : scoring ≠ diagnostic.
+- **Décision :** Correction **la moins chère fiable d'abord** derrière `GradingStrategyPort` :
+  `exact` → déterministe (normalisation), `short_answer` → **fuzzy** (Levenshtein, variantes,
+  partiel) ; `free_text` réservé à l'AI Gateway (non branché, on lève explicitement). L'analyse
+  d'erreurs (`classifyError`) applique la **taxonomie propriétaire** (correct/slip/guess/partial/
+  misconception) et calcule un **`evidenceWeight`** : un hasard chanceux ou un lapsus pèsent peu, un
+  indice affaiblit la preuve. Un `MisconceptionCatalogPort` (seed N5 : は/が, を/お) impute l'erreur
+  au bon concept (`attributedConcept`). `EvaluateAnswerUseCase` émet `AnswerEvaluated`,
+  `MisconceptionDetected`, `SlipDetected` ; l'API `POST /learners/:id/answers` chaîne ensuite
+  `RecordEvidenceUseCase` sur le concept imputé (même `correlationId`, un seul drain d'outbox).
+- **Conséquences :** Assessment reste **découplé** du Learner Model (pas de dépendance de code) ; le
+  bouclage se fait au composition root. `evidenceWeight` enrichit les paramètres *guess/slip* du BKT
+  par-signal au lieu de constantes globales. La classification IA et le minage de misconceptions
+  restent des extensions futures derrière les mêmes ports.
+
 ---
 
 ## 19. Questions ouvertes / à approfondir
@@ -2072,10 +2090,18 @@ Format : `ADR-NNN — Titre` · Statut · Contexte · Décision · Conséquences
       `POST /learners/:id/plan`, `GET /plans/:id`, `GET /learners/:id/plans/:planId/next-activity`.
       Validé in-memory **et** Postgres réel (51 tests).
 
+**Phase 3 (en cours) :**
+
+- [x] **Assessment & Analyse d'erreurs** (§6.4) : correction déterministe (`exact`) + **fuzzy**
+      (`short_answer`, Levenshtein) derrière `GradingStrategyPort` → **ÉVIDENCE pondérée** (taxonomie
+      propriétaire + `evidenceWeight`) ; catalogue de misconceptions (seed N5) → `attributedConcept`.
+      `EvaluateAnswerUseCase` émet `AnswerEvaluated`/`MisconceptionDetected`/`SlipDetected`. API
+      `POST /learners/:id/answers` **ferme la boucle** vers le Learner Model. Validé in-memory **et**
+      Postgres réel (64 tests). *(ADR-047)*
+
 **Prochaines étapes (Phase 3) :**
 
 - [ ] Diagnostic adaptatif graph-aware (IRT local + propagation bayésienne) (§6.2).
-- [ ] Assessment : correction déterministe/fuzzy + analyse d'erreurs → evidence pondérée (§6.4).
 - [ ] Format Selector (règles → bandit contraint) + génération de contenu via AI Gateway (§6.5).
 - [ ] Brancher un vrai fournisseur LLM derrière le `LLMPort` (cache, réparation, télémétrie).
 - [ ] pgvector (cache sémantique) + relais outbox → Kafka/Redpanda au scale.

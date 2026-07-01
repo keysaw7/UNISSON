@@ -35,6 +35,15 @@ import {
   type PlanRepositoryPort,
 } from '@unisson/learning-engine';
 import {
+  EvaluateAnswerUseCase,
+  GRADING_STRATEGY_PORT,
+  InMemoryMisconceptionCatalog,
+  MISCONCEPTION_CATALOG_PORT,
+  RuleBasedGradingStrategy,
+  type GradingStrategyPort,
+  type MisconceptionCatalogPort,
+} from '@unisson/assessment';
+import {
   createDb,
   createPool,
   PgEventJournal,
@@ -146,6 +155,20 @@ const providers: Provider[] = [
     ): NextActivityUseCase => new NextActivityUseCase(graph, state, model, plans),
     inject: [KNOWLEDGE_GRAPH_REPOSITORY_PORT, LEARNER_STATE_REPOSITORY_PORT, INFRA.MasteryModel, PLAN_REPOSITORY_PORT],
   },
+  { provide: GRADING_STRATEGY_PORT, useFactory: (): GradingStrategyPort => new RuleBasedGradingStrategy() },
+  {
+    provide: MISCONCEPTION_CATALOG_PORT,
+    useFactory: (): MisconceptionCatalogPort => new InMemoryMisconceptionCatalog(),
+  },
+  {
+    provide: EvaluateAnswerUseCase,
+    useFactory: (
+      grading: GradingStrategyPort,
+      catalog: MisconceptionCatalogPort,
+      outbox: OutboxPort,
+    ): EvaluateAnswerUseCase => new EvaluateAnswerUseCase(grading, catalog, outbox),
+    inject: [GRADING_STRATEGY_PORT, MISCONCEPTION_CATALOG_PORT, INFRA.Outbox],
+  },
 ];
 
 @Global()
@@ -165,6 +188,9 @@ const providers: Provider[] = [
     PLANNER_STRATEGY_PORT,
     CreatePlanUseCase,
     NextActivityUseCase,
+    GRADING_STRATEGY_PORT,
+    MISCONCEPTION_CATALOG_PORT,
+    EvaluateAnswerUseCase,
   ],
 })
 export class InfraModule {}

@@ -59,6 +59,12 @@ PLAN=$(curl -s -X POST http://localhost:3000/learners/learner-1/plan -H 'content
 echo "$PLAN"                       # plan.skillOrder + rationale par compétence
 PLAN_ID=$(echo "$PLAN" | sed -E 's/.*"id":"([^"]+)".*/\1/')
 curl "http://localhost:3000/learners/learner-1/plans/$PLAN_ID/next-activity"
+# Boucle fermée : corriger une réponse (Assessment) → évidence pondérée → maîtrise mise à jour
+curl -X POST http://localhost:3000/learners/learner-1/answers -H 'content-type: application/json' \
+  -d '{"activityId":"a1","activityType":"exact","expected":"a","learnerAnswer":"a","conceptsCovered":["hiragana-a"]}'
+# Détection de misconception connue (は/が) → attribution au bon concept
+curl -X POST http://localhost:3000/learners/learner-1/answers -H 'content-type: application/json' \
+  -d '{"activityId":"a2","activityType":"exact","expected":"は","learnerAnswer":"が","conceptsCovered":["particle-wa"]}'
 ```
 
 ## Structure (§17)
@@ -71,7 +77,7 @@ libs/
   learning-engine/     # KERNEL : Goal, Curriculum Planner (glouton pondéré), Sequencer
   knowledge-graph/     # Concept/Skill, prérequis pondérés, algos (topo, transitif), seed N5
   learner-modeling/    # Maîtrise + Oubli (FSRS+bayésien), EvidenceEvent, RecordEvidenceUseCase
-  assessment/          # Évidence pondérée, taxonomie d'erreurs
+  assessment/          # Correction déterministe/fuzzy, évidence pondérée, taxonomie + misconceptions
   content/             # Learning Objects, formats
   ai-orchestration/    # AI Gateway : LLMPort, capability parse_goal (Zod), adapters
   identity/            # IAM (générique)

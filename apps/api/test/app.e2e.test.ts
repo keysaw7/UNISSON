@@ -81,4 +81,44 @@ describe('API (e2e) — walking skeleton', () => {
     expect(['introduce', 'remediate', 'review']).toContain(next.body.activity.kind);
     expect(next.body.activity.rationale).toBeTruthy();
   });
+
+  it('POST /learners/:id/answers ferme la boucle : correction → évidence → maîtrise', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/learners/learner-3/answers')
+      .send({
+        activityId: 'act-e2e-1',
+        activityType: 'exact',
+        expected: 'a',
+        learnerAnswer: 'a',
+        conceptsCovered: ['hiragana-a'],
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.evidence.correct).toBe(true);
+    expect(res.body.evidence.errorType).toBe('correct');
+    expect(res.body.events).toContain('AnswerEvaluated');
+    expect(res.body.events).toContain('MasteryUpdated');
+    expect(res.body.state.pMastery).toBeGreaterThan(0);
+
+    const read = await request(app.getHttpServer()).get('/learners/learner-3/mastery/hiragana-a');
+    expect(read.body.state.pMastery).toBeCloseTo(res.body.state.pMastery, 6);
+  });
+
+  it('POST /learners/:id/answers détecte une misconception connue (は/が) et l’attribue', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/learners/learner-3/answers')
+      .send({
+        activityId: 'act-e2e-2',
+        activityType: 'exact',
+        expected: 'は',
+        learnerAnswer: 'が',
+        conceptsCovered: ['particle-wa'],
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.evidence.correct).toBe(false);
+    expect(res.body.evidence.errorType).toBe('misconception');
+    expect(res.body.evidence.attributedConcept).toBe('particle-wa');
+    expect(res.body.events).toContain('MisconceptionDetected');
+  });
 });
