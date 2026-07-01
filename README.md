@@ -3,9 +3,10 @@
 Moteur d'apprentissage adaptatif. Monolithe **modulaire**, architecture **hexagonale + DDD**,
 découplé des fournisseurs d'IA.
 
-> Conception complète dans [`ARCHITECTURE.md`](./ARCHITECTURE.md) (44 ADR).
-> Ce dépôt implémente la **Phase 1** : cœur scientifique Maîtrise+Oubli (FSRS+bayésien), graphe
-> Japonais N5, outbox + journal d'événements, persistance Postgres/Drizzle optionnelle.
+> Conception complète dans [`ARCHITECTURE.md`](./ARCHITECTURE.md) (46 ADR).
+> Ce dépôt implémente les **Phases 1–2** : cœur scientifique Maîtrise+Oubli (FSRS+bayésien), graphe
+> Japonais N5, outbox + journal d'événements, **Curriculum Planner** + **Sequencer**, persistance
+> Postgres/Drizzle optionnelle.
 
 ## Prérequis
 
@@ -52,6 +53,12 @@ curl http://localhost:3000/graph/skills/sentence/prerequisites
 curl -X POST http://localhost:3000/learners/learner-1/evidence -H 'content-type: application/json' \
   -d '{"conceptId":"hiragana-a","correct":true}'
 curl http://localhost:3000/learners/learner-1/mastery/hiragana-a
+# Planifier un parcours (sous-DAG requis + ordre glouton pondéré) puis demander l'activité suivante
+PLAN=$(curl -s -X POST http://localhost:3000/learners/learner-1/plan -H 'content-type: application/json' \
+  -d '{"targetSkills":["sentence"],"motivation":"voyage"}')
+echo "$PLAN"                       # plan.skillOrder + rationale par compétence
+PLAN_ID=$(echo "$PLAN" | sed -E 's/.*"id":"([^"]+)".*/\1/')
+curl "http://localhost:3000/learners/learner-1/plans/$PLAN_ID/next-activity"
 ```
 
 ## Structure (§17)
@@ -61,7 +68,7 @@ apps/
   api/                 # Composition root NestJS (câble adapters ↔ ports par tokens)
 libs/
   shared-kernel/       # DomainEvent, IDs typés, Result, EventBus, Outbox + journal + relais
-  learning-engine/     # KERNEL : StructuredGoal, GoalParserPort, StartGoalUseCase
+  learning-engine/     # KERNEL : Goal, Curriculum Planner (glouton pondéré), Sequencer
   knowledge-graph/     # Concept/Skill, prérequis pondérés, algos (topo, transitif), seed N5
   learner-modeling/    # Maîtrise + Oubli (FSRS+bayésien), EvidenceEvent, RecordEvidenceUseCase
   assessment/          # Évidence pondérée, taxonomie d'erreurs

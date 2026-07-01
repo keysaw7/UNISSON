@@ -25,6 +25,16 @@ import {
   type MasteryModel,
 } from '@unisson/learner-modeling';
 import {
+  CreatePlanUseCase,
+  InMemoryPlanRepository,
+  NextActivityUseCase,
+  PLAN_REPOSITORY_PORT,
+  PLANNER_STRATEGY_PORT,
+  WeightedGreedyPlanner,
+  type PlannerStrategyPort,
+  type PlanRepositoryPort,
+} from '@unisson/learning-engine';
+import {
   createDb,
   createPool,
   PgEventJournal,
@@ -32,6 +42,7 @@ import {
   PgKnowledgeGraphRepository,
   PgLearnerStateRepository,
   PgOutbox,
+  PgPlanRepository,
   type Db,
 } from '@unisson/persistence';
 
@@ -101,6 +112,40 @@ const providers: Provider[] = [
     ): RecordEvidenceUseCase => new RecordEvidenceUseCase(evidence, state, model, outbox),
     inject: [EVIDENCE_REPOSITORY_PORT, LEARNER_STATE_REPOSITORY_PORT, INFRA.MasteryModel, INFRA.Outbox],
   },
+  { provide: PLANNER_STRATEGY_PORT, useFactory: (): PlannerStrategyPort => new WeightedGreedyPlanner() },
+  {
+    provide: PLAN_REPOSITORY_PORT,
+    useFactory: (db: Db | null): PlanRepositoryPort =>
+      db ? new PgPlanRepository(db) : new InMemoryPlanRepository(),
+    inject: [INFRA.Db],
+  },
+  {
+    provide: CreatePlanUseCase,
+    useFactory: (
+      graph: KnowledgeGraphRepositoryPort,
+      state: LearnerStateRepositoryPort,
+      strategy: PlannerStrategyPort,
+      plans: PlanRepositoryPort,
+      outbox: OutboxPort,
+    ): CreatePlanUseCase => new CreatePlanUseCase(graph, state, strategy, plans, outbox),
+    inject: [
+      KNOWLEDGE_GRAPH_REPOSITORY_PORT,
+      LEARNER_STATE_REPOSITORY_PORT,
+      PLANNER_STRATEGY_PORT,
+      PLAN_REPOSITORY_PORT,
+      INFRA.Outbox,
+    ],
+  },
+  {
+    provide: NextActivityUseCase,
+    useFactory: (
+      graph: KnowledgeGraphRepositoryPort,
+      state: LearnerStateRepositoryPort,
+      model: MasteryModel,
+      plans: PlanRepositoryPort,
+    ): NextActivityUseCase => new NextActivityUseCase(graph, state, model, plans),
+    inject: [KNOWLEDGE_GRAPH_REPOSITORY_PORT, LEARNER_STATE_REPOSITORY_PORT, INFRA.MasteryModel, PLAN_REPOSITORY_PORT],
+  },
 ];
 
 @Global()
@@ -116,6 +161,10 @@ const providers: Provider[] = [
     LEARNER_STATE_REPOSITORY_PORT,
     EVIDENCE_REPOSITORY_PORT,
     RecordEvidenceUseCase,
+    PLAN_REPOSITORY_PORT,
+    PLANNER_STRATEGY_PORT,
+    CreatePlanUseCase,
+    NextActivityUseCase,
   ],
 })
 export class InfraModule {}

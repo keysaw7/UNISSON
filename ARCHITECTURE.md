@@ -4,7 +4,7 @@
 > On l'alimente à chaque étape. Rien ici n'est « du code » : c'est la réflexion d'architecture.
 
 **Dernière mise à jour :** 2026-07-01 — Scaffolding Phase 0 réalisé (ADR-040) — code initial en place
-**Statut :** Conception complète (44 ADR) + **Phase 1 implémentée** : cœur scientifique Maîtrise+Oubli (FSRS+bayésien), graphe Japonais N5, outbox + journal d'événements, persistance Postgres/Drizzle optionnelle derrière les ports (39 tests verts, in-memory **et** Postgres réel). Voir `README.md`.
+**Statut :** Conception complète (46 ADR) + **Phases 1–2 implémentées** : cœur scientifique Maîtrise+Oubli (FSRS+bayésien), graphe Japonais N5, outbox + journal d'événements, **Curriculum Planner** (glouton pondéré) + **Sequencer** (piloté par la rétrievabilité), persistance Postgres/Drizzle optionnelle derrière les ports (51 tests verts, in-memory **et** Postgres réel). Voir `README.md`.
 
 ---
 
@@ -1995,6 +1995,28 @@ Format : `ADR-NNN — Titre` · Statut · Contexte · Décision · Conséquences
 - **Conséquences :** Sérialisation déterministe et testable ; un contexte peut devenir un service
   sans démêler de jointures.
 
+### ADR-045 — Curriculum Planner : glouton pondéré explicable derrière `PlannerStrategyPort`
+- **Statut :** ✅ Accepté (Phase 2)
+- **Contexte :** Concrétiser ADR-016. Produire un chemin **interprétable** (« pourquoi cet ordre »)
+  sans sur-spécifier (ne pas tuer l'adaptativité du Sequencer).
+- **Décision :** Le use-case calcule le sous-DAG requis (clôture transitive − acquis, classé par
+  agrégation de maîtrise des concepts) puis délègue l'ordre à `PlannerStrategyPort`. L'impl. B
+  (`WeightedGreedyPlanner`) score chaque compétence *prête* : `w1·pertinence + w2·quickWin +
+  w3·valeurDeDéblocage − w4·profondeur`, avec un `rationale` par compétence. Plans versionnés
+  (`PlanRepositoryPort`, mémoire + Postgres). Faisabilité vs budget → `GoalInfeasibleDetected`.
+- **Conséquences :** Optimum local mais explicable et rapide ; approche C (ILP/deadline) branchable
+  derrière le même port. La profondeur ne compte que les prérequis **encore à acquérir**.
+
+### ADR-046 — Sequencer : arbitrage pur piloté par la rétrievabilité
+- **Statut :** ✅ Accepté (Phase 2)
+- **Contexte :** Décider « quelle activité maintenant » (§9), entièrement dans notre code.
+- **Décision :** `chooseNextActivity` (fonction pure) applique une priorité stricte : révision
+  **urgente** (rétrievabilité < seuil) → remédiation d'un prérequis faible → introduction d'un
+  nouveau concept (difficulté = maîtrise + ε) → consolidation → idle. Le use-case assemble le
+  contexte (dus + prochaine brique du plan) depuis le graphe et le modèle Maîtrise+Oubli.
+- **Conséquences :** Séparation nette Planner (macro, rare) / Sequencer (micro, chaque activité) ;
+  l'IA n'intervient qu'en aval pour produire le contenu.
+
 ---
 
 ## 19. Questions ouvertes / à approfondir
@@ -2039,10 +2061,21 @@ Format : `ADR-NNN — Titre` · Statut · Contexte · Décision · Conséquences
 - [x] API : `GET /graph/skills/:id/prerequisites` (direct + transitif), `POST /learners/:id/evidence`,
       `GET /learners/:id/mastery/:conceptId`.
 
-**Prochaines étapes (Phase 2) :**
+**Phase 2 (réalisée) :**
 
-- [ ] Curriculum Planner : sous-DAG requis + tri topologique glouton pondéré + faisabilité (§6.3).
-- [ ] Sequencer : arbitrage révision/nouveauté piloté par la rétrievabilité (§9).
+- [x] **Curriculum Planner** (§6.3) : clôture transitive des prérequis → soustraction de l'acquis
+      (agrégation par concept) → **tri topologique glouton pondéré** (approche B, explicable) →
+      faisabilité vs budget. Plans **versionnés**, `PlanCreated`/`GoalInfeasibleDetected`. *(ADR-045)*
+- [x] **Sequencer** (§9) : arbitrage pur révision urgente → remédiation → nouveau concept
+      (difficulté = maîtrise + ε) → consolidation, piloté par la rétrievabilité. *(ADR-046)*
+- [x] Persistance PG du plan (`learning_plan`) derrière `PlanRepositoryPort` ; API :
+      `POST /learners/:id/plan`, `GET /plans/:id`, `GET /learners/:id/plans/:planId/next-activity`.
+      Validé in-memory **et** Postgres réel (51 tests).
+
+**Prochaines étapes (Phase 3) :**
+
 - [ ] Diagnostic adaptatif graph-aware (IRT local + propagation bayésienne) (§6.2).
-- [ ] Brancher un vrai fournisseur LLM derrière le `LLMPort` (Gateway : cache, réparation, télémétrie).
-- [ ] pgvector pour le cache sémantique + relais outbox → Kafka/Redpanda au scale.
+- [ ] Assessment : correction déterministe/fuzzy + analyse d'erreurs → evidence pondérée (§6.4).
+- [ ] Format Selector (règles → bandit contraint) + génération de contenu via AI Gateway (§6.5).
+- [ ] Brancher un vrai fournisseur LLM derrière le `LLMPort` (cache, réparation, télémétrie).
+- [ ] pgvector (cache sémantique) + relais outbox → Kafka/Redpanda au scale.

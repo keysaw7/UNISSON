@@ -9,6 +9,8 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@unisson/shared-kernel": "*"
+    "@unisson/shared-kernel": "*",
+    "@unisson/knowledge-graph": "*",
+    "@unisson/learner-modeling": "*"
   }
 }

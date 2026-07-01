@@ -1,12 +1,13 @@
 import { Module } from '@nestjs/common';
 import { GraphController } from './graph.controller';
 import { LearnersController } from './learners.controller';
+import { PlansController } from './plans.controller';
 
 /**
- * Endpoints du Learning Engine (Phase 1) : graphe de connaissances (N5) et boucle de maîtrise.
- * Les dépendances (repos, modèle, outbox, relais) proviennent de `InfraModule` (@Global).
+ * Endpoints du Learning Engine : graphe (N5), boucle de maîtrise (Phase 1), planification et
+ * séquençage (Phase 2). Les dépendances proviennent de `InfraModule` (@Global).
  */
 @Module({
-  controllers: [GraphController, LearnersController],
+  controllers: [GraphController, LearnersController, PlansController],
 })
 export class EngineModule {}

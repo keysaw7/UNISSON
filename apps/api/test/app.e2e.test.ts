@@ -61,4 +61,24 @@ describe('API (e2e) — walking skeleton', () => {
     expect(read.body.state.pMastery).toBeCloseTo(res.body.state.pMastery, 6);
     expect(read.body.stage).toBeTruthy();
   });
+
+  it('POST /learners/:id/plan planifie le sous-DAG N5 et GET next-activity propose une activité', async () => {
+    const created = await request(app.getHttpServer())
+      .post('/learners/learner-2/plan')
+      .send({ targetSkills: ['sentence'], motivation: 'voyage' });
+
+    expect(created.status).toBe(201);
+    expect(created.body.plan.skillOrder).toHaveLength(7);
+    expect(created.body.events).toContain('PlanCreated');
+    const planId = created.body.plan.id;
+
+    const fetched = await request(app.getHttpServer()).get(`/plans/${planId}`);
+    expect(fetched.status).toBe(200);
+    expect(fetched.body.id).toBe(planId);
+
+    const next = await request(app.getHttpServer()).get(`/learners/learner-2/plans/${planId}/next-activity`);
+    expect(next.status).toBe(200);
+    expect(['introduce', 'remediate', 'review']).toContain(next.body.activity.kind);
+    expect(next.body.activity.rationale).toBeTruthy();
+  });
 });

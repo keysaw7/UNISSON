@@ -90,6 +90,21 @@ export const outbox = pgTable(
   (t) => [index('outbox_unpublished').on(t.publishedAt, t.seq)],
 );
 
+// ── Planning (Learning Engine) ───────────────────────────────────────────────────
+export const learningPlan = pgTable(
+  'learning_plan',
+  {
+    id: text('id').primaryKey(),
+    goalId: text('goal_id').notNull(),
+    learnerId: text('learner_id').notNull(),
+    domain: text('domain').notNull(),
+    version: integer('version').notNull(),
+    plan: jsonb('plan').$type<unknown>().notNull(),
+    createdAt: text('created_at').notNull(),
+  },
+  (t) => [index('plan_by_goal').on(t.goalId, t.version)],
+);
+
 export const domainEvent = pgTable('domain_event', {
   eventId: text('event_id').primaryKey(),
   type: text('type').notNull(),
@@ -109,6 +124,7 @@ export const schema = {
   skillConcept,
   masteryState,
   evidenceEvent,
+  learningPlan,
   outbox,
   domainEvent,
 };

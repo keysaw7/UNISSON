@@ -10,6 +10,7 @@
     "@unisson/shared-kernel": "*",
     "@unisson/knowledge-graph": "*",
     "@unisson/learner-modeling": "*",
+    "@unisson/learning-engine": "*",
     "drizzle-orm": "^0.45.2",
     "pg": "^8.22.0"
   }
