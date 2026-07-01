@@ -14,7 +14,11 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "format": "prettier --write .",
-    "start:api": "tsx watch apps/api/src/main.ts"
+    "start:api": "tsx watch apps/api/src/main.ts",
+    "db:up": "docker compose up -d postgres",
+    "db:down": "docker compose down",
+    "db:setup": "tsx libs/persistence/src/cli/setup-db.ts",
+    "db:generate": "drizzle-kit generate"
   },
   "engines": {
     "node": ">=20"
@@ -23,6 +27,8 @@
     "@eslint/js": "^10.0.1",
     "@swc/core": "^1.15.43",
     "@types/node": "^26.0.1",
+    "@types/pg": "^8.20.0",
+    "drizzle-kit": "^0.31.10",
     "eslint": "^10.6.0",
     "globals": "^17.7.0",
     "prettier": "^3.9.4",

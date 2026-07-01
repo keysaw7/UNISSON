@@ -4,7 +4,7 @@
 > On l'alimente à chaque étape. Rien ici n'est « du code » : c'est la réflexion d'architecture.
 
 **Dernière mise à jour :** 2026-07-01 — Scaffolding Phase 0 réalisé (ADR-040) — code initial en place
-**Statut :** Conception complète (40 ADR) + **squelette Phase 0 implémenté** (lint/typecheck/tests verts). Voir `README.md`.
+**Statut :** Conception complète (44 ADR) + **Phase 1 implémentée** : cœur scientifique Maîtrise+Oubli (FSRS+bayésien), graphe Japonais N5, outbox + journal d'événements, persistance Postgres/Drizzle optionnelle derrière les ports (39 tests verts, in-memory **et** Postgres réel). Voir `README.md`.
 
 ---
 
@@ -1955,6 +1955,46 @@ Format : `ADR-NNN — Titre` · Statut · Contexte · Décision · Conséquences
 - **Conséquences :** Intention de l'ADR-038 préservée (frontières + DI + ports) ; migration vers Nx
   possible plus tard sans réécrire le domaine. Le domaine framework-agnostique est même *plus* pur.
 
+### ADR-041 — Persistance optionnelle : mémoire par défaut, Postgres derrière `DATABASE_URL`
+- **Statut :** ✅ Accepté (Phase 1)
+- **Contexte :** Garder la boucle de dev et la CI rapides et sans dépendance externe, tout en
+  livrant une vraie persistance Postgres.
+- **Décision :** Chaque repository port a **deux** adapters (mémoire + Postgres). La composition
+  root (`InfraModule`) choisit selon `DATABASE_URL`. Les tests d'intégration PG sont **gardés**
+  (`describe.skipIf`) → verts avec ou sans base ; `docker-compose` + `runMigrations` + `seed`
+  fournissent l'environnement réel.
+- **Conséquences :** CI verte sans base ; le domaine ignore le backend ; bascule mémoire↔PG sans
+  toucher au métier. Vérifié : même suite verte in-memory **et** sur Postgres réel.
+
+### ADR-042 — Réalisation du cœur scientifique (Maîtrise + Oubli) et du graphe N5
+- **Statut :** ✅ Accepté (Phase 1)
+- **Contexte :** Concrétiser ADR-006/007 en TypeScript pur, testable, sans dépendance ML.
+- **Décision :** Courbe d'oubli FSRS en **loi de puissance** calibrée `R = 0.9` quand `t = stabilité` ;
+  maîtrise mise à jour par **BKT bayésien** pondéré par la fiabilité de la preuve ; **effet
+  d'espacement** (réussir une révision tardive fait bondir la stabilité) ; **lapse** sur échec.
+  État = **projection rejouable** des evidence events. Graphe N5 = données + algos purs (tri
+  topologique de Kahn, fermeture transitive BFS) derrière `KnowledgeGraphRepositoryPort`.
+- **Conséquences :** Un seul état latent alimente lacunes, révisions dues et niveau ; remplaçable
+  par un DKT plus tard via replay, sans perte.
+
+### ADR-043 — Outbox + journal `domain_event` in-process, relais idempotent
+- **Statut :** ✅ Accepté (Phase 1)
+- **Contexte :** Publier des événements de façon fiable sans « dual write » (§12.3).
+- **Décision :** `OutboxPort.enqueue` dans la même unité de travail que l'écriture d'état ; un
+  `OutboxRelay` draine → journalise (`domain_event`) → diffuse sur le bus → marque publié.
+  Idempotence par `eventId`. In-process d'abord ; prêt pour un relais poll/CDC → Kafka.
+- **Conséquences :** Traçabilité causale (`correlationId`/`causationId`) et actif de replay dès la
+  Phase 1, sans infrastructure de streaming.
+
+### ADR-044 — Instants en `text` ISO-8601, aucune FK inter-contextes
+- **Statut :** ✅ Accepté (Phase 1)
+- **Contexte :** Round-trip identique entre domaine, adapters mémoire et Postgres ; extractibilité
+  des contextes (ADR-027).
+- **Décision :** Les timestamps métier sont stockés en `text` ISO (pas de dérive de fuseau) ; les
+  tables sont possédées par contexte, **aucune FK inter-contextes** (référence par ID).
+- **Conséquences :** Sérialisation déterministe et testable ; un contexte peut devenir un service
+  sans démêler de jointures.
+
 ---
 
 ## 19. Questions ouvertes / à approfondir
@@ -1986,9 +2026,23 @@ Format : `ADR-NNN — Titre` · Statut · Contexte · Décision · Conséquences
       lintées, AI Gateway minimal (LLMPort + capability Zod), walking skeleton e2e vert, CI.
       *(→ ADR-040 ; voir README.md)*
 
-**Prochaines étapes (Phase 1) :**
+**Phase 1 (réalisée) :**
 
-- [ ] Brancher la persistance (Postgres + Drizzle) derrière les repository ports (stubs actuels).
-- [ ] Modéliser le graphe Japonais N5 dans `knowledge-graph` (données + recursive CTE).
-- [ ] Implémenter le modèle Maîtrise+Oubli (FSRS + bayésien) dans `learner-modeling`.
-- [ ] Ajouter l'outbox + le journal `domain_event` (§12).
+- [x] Modèle **Maîtrise + Oubli** (FSRS puissance + bayésien BKT + effet d'espacement) dans
+      `learner-modeling`, pur et **rejouable** depuis les evidence events. *(→ §8, ADR-042)*
+- [x] Graphe **Japonais N5** modélisé dans `knowledge-graph` (skills, prérequis pondérés, concepts)
+      + algorithmes purs (tri topologique, fermeture transitive) + adapter mémoire. *(→ §7, ADR-042)*
+- [x] **Outbox + journal `domain_event`** (relais idempotent in-process, bus → journal). *(→ §12, ADR-043)*
+- [x] Persistance **Postgres + Drizzle** derrière les repository ports (recursive CTE, upsert projection,
+      outbox transactionnelle), **optionnelle** : adapters mémoire par défaut, PG si `DATABASE_URL`.
+      Validée par des tests d'intégration réels (docker-compose). *(→ §12, ADR-041, ADR-044)*
+- [x] API : `GET /graph/skills/:id/prerequisites` (direct + transitif), `POST /learners/:id/evidence`,
+      `GET /learners/:id/mastery/:conceptId`.
+
+**Prochaines étapes (Phase 2) :**
+
+- [ ] Curriculum Planner : sous-DAG requis + tri topologique glouton pondéré + faisabilité (§6.3).
+- [ ] Sequencer : arbitrage révision/nouveauté piloté par la rétrievabilité (§9).
+- [ ] Diagnostic adaptatif graph-aware (IRT local + propagation bayésienne) (§6.2).
+- [ ] Brancher un vrai fournisseur LLM derrière le `LLMPort` (Gateway : cache, réparation, télémétrie).
+- [ ] pgvector pour le cache sémantique + relais outbox → Kafka/Redpanda au scale.

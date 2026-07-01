@@ -38,4 +38,27 @@ describe('API (e2e) — walking skeleton', () => {
     expect(res.body.targetSkills).toContain('hiragana');
     expect(res.body.id).toBeTruthy();
   });
+
+  it('GET /graph/skills/:id/prerequisites renvoie la fermeture transitive (N5)', async () => {
+    const res = await request(app.getHttpServer()).get('/graph/skills/sentence/prerequisites');
+    expect(res.status).toBe(200);
+    expect(res.body.skill.title).toBe('Construire une phrase');
+    expect(res.body.transitive).toContain('hiragana');
+    expect(res.body.transitive).toHaveLength(6);
+  });
+
+  it('POST /learners/:id/evidence met à jour la maîtrise et émet des événements', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/learners/learner-1/evidence')
+      .send({ conceptId: 'hiragana-a', correct: true });
+
+    expect(res.status).toBe(201);
+    expect(res.body.state.pMastery).toBeGreaterThan(0);
+    expect(res.body.events).toContain('MasteryUpdated');
+
+    const read = await request(app.getHttpServer()).get('/learners/learner-1/mastery/hiragana-a');
+    expect(read.status).toBe(200);
+    expect(read.body.state.pMastery).toBeCloseTo(res.body.state.pMastery, 6);
+    expect(read.body.stage).toBeTruthy();
+  });
 });

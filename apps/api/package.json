@@ -12,6 +12,9 @@
     "@nestjs/platform-express": "*",
     "@unisson/ai-orchestration": "*",
     "@unisson/learning-engine": "*",
+    "@unisson/knowledge-graph": "*",
+    "@unisson/learner-modeling": "*",
+    "@unisson/persistence": "*",
     "@unisson/shared-kernel": "*",
     "reflect-metadata": "*",
     "rxjs": "*"

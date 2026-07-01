@@ -15,7 +15,34 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      # Portail Phase 0 : frontières + types + tests doivent passer.
+      # Portail : frontières + types + tests (adapters mémoire) doivent passer.
       - run: npm run lint
       - run: npm run typecheck
+      - run: npm test
+
+  integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: unisson
+          POSTGRES_PASSWORD: unisson
+          POSTGRES_DB: unisson
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U unisson -d unisson"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgres://unisson:unisson@localhost:5432/unisson
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      # Chemin Postgres : migration + seed + suite complète (inclut l'intégration PG).
+      - run: npm run db:setup
       - run: npm test

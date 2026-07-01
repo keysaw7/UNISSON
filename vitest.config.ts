@@ -15,6 +15,7 @@ const alias = {
   '@unisson/content': r('./libs/content/src/index.ts'),
   '@unisson/ai-orchestration': r('./libs/ai-orchestration/src/index.ts'),
   '@unisson/identity': r('./libs/identity/src/index.ts'),
+  '@unisson/persistence': r('./libs/persistence/src/index.ts'),
 };
 
 export default defineConfig({

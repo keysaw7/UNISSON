@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: unisson-postgres
+    environment:
+      POSTGRES_USER: unisson
+      POSTGRES_PASSWORD: unisson
+      POSTGRES_DB: unisson
+    ports:
+      - '5432:5432'
+    volumes:
+      - unisson_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U unisson -d unisson']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  unisson_pgdata:
