@@ -60,4 +60,15 @@ describe('selectLlmProviders', () => {
   it('rejette une valeur LLM_PROVIDER inconnue', () => {
     expect(() => selectLlmProviders({ LLM_PROVIDER: 'mistral' })).toThrow(/inconnu/);
   });
+
+  it('construit un OpenAiLlmAdapter même avec un modèle de raisonnement (ex: gpt-5-nano)', () => {
+    const { primary } = selectLlmProviders({
+      OPENAI_API_KEY: 'sk-o',
+      OPENAI_MODEL: 'gpt-5-nano',
+      OPENAI_REASONING_EFFORT: 'low',
+      OPENAI_VERBOSITY: 'medium',
+      OPENAI_MAX_COMPLETION_TOKENS: '1500',
+    });
+    expect(primary).toBeInstanceOf(OpenAiLlmAdapter);
+  });
 });

@@ -1,6 +1,6 @@
 import type { LLMPort } from '../ports/llm.port';
 import { AnthropicLlmAdapter } from '../adapters/anthropic-llm.adapter';
-import { OpenAiLlmAdapter } from '../adapters/openai-llm.adapter';
+import { OpenAiLlmAdapter, type ReasoningEffort, type Verbosity } from '../adapters/openai-llm.adapter';
 import { StubLlmAdapter } from '../adapters/stub-llm.adapter';
 
 /** Sous-ensemble de `process.env` utilisé pour la sélection — évite de dépendre de `process` dans les tests. */
@@ -11,6 +11,10 @@ export interface LlmProviderEnv {
   OPENAI_API_KEY?: string;
   OPENAI_MODEL?: string;
   OPENAI_ORGANIZATION?: string;
+  /** Modèles de raisonnement (gpt-5*, o-series) uniquement — ignorés pour les autres modèles OpenAI. */
+  OPENAI_REASONING_EFFORT?: string;
+  OPENAI_VERBOSITY?: string;
+  OPENAI_MAX_COMPLETION_TOKENS?: string;
 }
 
 export interface SelectedLlmProviders {
@@ -38,6 +42,11 @@ export function selectLlmProviders(env: LlmProviderEnv): SelectedLlmProviders {
         apiKey: env.OPENAI_API_KEY,
         model: env.OPENAI_MODEL,
         organization: env.OPENAI_ORGANIZATION,
+        reasoningEffort: env.OPENAI_REASONING_EFFORT as ReasoningEffort | undefined,
+        verbosity: env.OPENAI_VERBOSITY as Verbosity | undefined,
+        maxCompletionTokens: env.OPENAI_MAX_COMPLETION_TOKENS
+          ? Number(env.OPENAI_MAX_COMPLETION_TOKENS)
+          : undefined,
       })
     : undefined;
 

@@ -4,7 +4,7 @@
 > On l'alimente à chaque étape. Rien ici n'est « du code » : c'est la réflexion d'architecture.
 
 **Dernière mise à jour :** 2026-07-01 — AI Gateway opérationnel (ADR-050) — cache + réparation + fallback + télémétrie, fournisseur Anthropic réel derrière `LLMPort`
-**Statut :** Conception complète (50 ADR) + **Phases 1–3 implémentées** : cœur scientifique Maîtrise+Oubli (FSRS+bayésien), graphe Japonais N5, outbox + journal d'événements, **Curriculum Planner** (glouton pondéré) + **Sequencer** (piloté par la rétrievabilité), **Diagnostic adaptatif graph-aware**, **Assessment** (correction + évidence pondérée), **Format Selector** (règles → bandit contraint), **AI Gateway** générique avec fournisseur LLM réel optionnel, persistance Postgres/Drizzle optionnelle derrière les ports (112 tests, verts in-memory **et** Postgres réel — 4 tests d'intégration réels sautés sans clés API/`DATABASE_URL`). Voir `README.md`.
+**Statut :** Conception complète (50 ADR) + **Phases 1–3 implémentées** : cœur scientifique Maîtrise+Oubli (FSRS+bayésien), graphe Japonais N5, outbox + journal d'événements, **Curriculum Planner** (glouton pondéré) + **Sequencer** (piloté par la rétrievabilité), **Diagnostic adaptatif graph-aware**, **Assessment** (correction + évidence pondérée), **Format Selector** (règles → bandit contraint), **AI Gateway** générique avec fournisseur LLM réel optionnel, persistance Postgres/Drizzle optionnelle derrière les ports (117 tests, verts in-memory **et** Postgres réel — 4 tests d'intégration réels sautés sans clés API/`DATABASE_URL`). Voir `README.md`.
 
 ---
 
@@ -2094,7 +2094,15 @@ Format : `ADR-NNN — Titre` · Statut · Contexte · Décision · Conséquences
   `OPENAI_API_KEY`) : une clé présente → ce fournisseur en primaire, l'autre (ou le stub) en secours ;
   les deux présentes → Anthropic primaire par défaut (`LLM_PROVIDER` inverse ce choix) ; aucune → stub
   seul (dev/CI, comme Postgres vs. mémoire). `LLM_PROVIDER` demandé sans la clé correspondante échoue
-  tôt plutôt que de retomber silencieusement sur le stub.
+  tôt plutôt que de retomber silencieusement sur le stub. `OpenAiLlmAdapter` détecte les **modèles de
+  raisonnement** (préfixe `gpt-5`, `o1`, `o3`, `o4` — ex. `gpt-5-nano`) et applique alors des défauts
+  adaptés : `reasoning_effort: 'minimal'` + `verbosity: 'low'` (nos capacités sont de l'extraction
+  JSON déterministe, pas une tâche qui bénéficie de délibération) et `max_completion_tokens` (le
+  raisonnement est facturé et consomme ce budget même invisible ; sans plafond adapté, une sortie
+  vide `finish_reason: 'length'` est possible — détectée et levée en erreur explicite plutôt que
+  silencieusement mal interprétée). Les trois valeurs restent surchargeables (`OPENAI_REASONING_EFFORT`,
+  `OPENAI_VERBOSITY`, `OPENAI_MAX_COMPLETION_TOKENS`) et ne sont jamais envoyées à un modèle non
+  détecté comme modèle de raisonnement (l'API rejette ces champs sur `gpt-4o-mini` par ex.).
 - **Conséquences :** Ajouter une 3e capability ne demandera plus de ré-écrire cache/réparation/
   télémétrie — seulement prompt + schéma. Ajouter un 3e fournisseur (§10.7) = un nouvel adapter
   `LLMPort` + une branche dans `selectLlmProviders`, zéro ligne dans le domaine ni les capabilities.

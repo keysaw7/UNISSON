@@ -65,6 +65,15 @@ boucle de réparation (re-ask si la sortie ne respecte pas le schéma Zod), fall
 et télémétrie structurée par capacité. Toutes les variables (rôle, valeur par défaut, où obtenir
 une clé) sont documentées dans [`.env.example`](./.env.example).
 
+**Modèles de raisonnement (`gpt-5-nano`, `o1`, `o3`…)** : `OpenAiLlmAdapter` les détecte au préfixe
+du nom de modèle et applique automatiquement `reasoning_effort=minimal` + `verbosity=low` (nos
+capacités sont de l'extraction JSON déterministe, pas une tâche qui bénéficie de délibération) et un
+plafond `max_completion_tokens` — le raisonnement est facturé et consomme ce budget même quand il
+n'apparaît pas dans la réponse ; un plafond trop bas peut vider la réponse visible, ce que l'adapter
+détecte et signale avec une erreur explicite plutôt qu'un échec silencieux. Rien à configurer pour
+utiliser `gpt-5-nano`, mais `OPENAI_REASONING_EFFORT` / `OPENAI_VERBOSITY` /
+`OPENAI_MAX_COMPLETION_TOKENS` permettent de surcharger ces défauts.
+
 ### Essayer l'API
 
 ```bash
