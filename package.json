@@ -1,0 +1,35 @@
+{
+  "name": "unisson",
+  "version": "0.0.0",
+  "private": true,
+  "description": "UNISSON — Learning Engine de nouvelle génération (monolithe modulaire, architecture hexagonale + DDD)",
+  "type": "commonjs",
+  "workspaces": [
+    "libs/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "format": "prettier --write .",
+    "start:api": "tsx watch apps/api/src/main.ts"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@swc/core": "^1.15.43",
+    "@types/node": "^26.0.1",
+    "eslint": "^10.6.0",
+    "globals": "^17.7.0",
+    "prettier": "^3.9.4",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.62.1",
+    "unplugin-swc": "^1.5.9",
+    "vitest": "^4.1.9"
+  }
+}

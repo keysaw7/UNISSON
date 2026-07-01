@@ -1,0 +1,7 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node", "reflect-metadata"]
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts"]
+}

@@ -1,0 +1,24 @@
+{
+  "name": "@unisson/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "start": "tsx watch src/main.ts"
+  },
+  "dependencies": {
+    "@nestjs/common": "*",
+    "@nestjs/core": "*",
+    "@nestjs/platform-express": "*",
+    "@unisson/ai-orchestration": "*",
+    "@unisson/learning-engine": "*",
+    "@unisson/shared-kernel": "*",
+    "reflect-metadata": "*",
+    "rxjs": "*"
+  },
+  "devDependencies": {
+    "@nestjs/testing": "*",
+    "@types/supertest": "*",
+    "supertest": "*"
+  }
+}
