@@ -63,15 +63,15 @@ import {
   AI_GATEWAY,
   AiContentGeneratorAdapter,
   AiGateway,
-  AnthropicLlmAdapter,
   CACHE_PORT,
   ConsoleTelemetryAdapter,
   InMemoryCache,
   LLM_PORT,
-  StubLlmAdapter,
+  selectLlmProviders,
   TELEMETRY_PORT,
   type CachePort,
   type LLMPort,
+  type SelectedLlmProviders,
   type TelemetryPort,
 } from '@unisson/ai-orchestration';
 import {
@@ -100,6 +100,7 @@ export const INFRA = {
   EventJournal: Symbol('DomainEventJournalPort'),
   OutboxRelay: Symbol('OutboxRelay'),
   MasteryModel: Symbol('MasteryModel'),
+  LlmProviders: Symbol('SelectedLlmProviders'),
 } as const;
 
 const providers: Provider[] = [
@@ -233,25 +234,27 @@ const providers: Provider[] = [
     inject: [LEARNER_STATE_REPOSITORY_PORT, INFRA.MasteryModel],
   },
   {
-    // Fournisseur réel derrière `LLMPort` si `ANTHROPIC_API_KEY` est défini, sinon le stub
-    // déterministe (dev/CI) — même bascule que Postgres vs. mémoire (§17.2). Changer de
-    // fournisseur = changer cette seule factory ; rien d'autre dans le système ne bouge (§10.7).
+    // Sélection du/des fournisseur(s) LLM depuis l'environnement (Anthropic / OpenAI / stub —
+    // §10.7, cf. `.env.example`). Calculée une seule fois et partagée par `LLM_PORT` et
+    // `AI_GATEWAY` pour ne construire qu'une seule instance de chaque adapter par processus.
+    provide: INFRA.LlmProviders,
+    useFactory: (): SelectedLlmProviders => selectLlmProviders(process.env),
+  },
+  {
     provide: LLM_PORT,
-    useFactory: (): LLMPort =>
-      process.env.ANTHROPIC_API_KEY
-        ? new AnthropicLlmAdapter({ apiKey: process.env.ANTHROPIC_API_KEY, model: process.env.ANTHROPIC_MODEL })
-        : new StubLlmAdapter(),
+    useFactory: (providers: SelectedLlmProviders): LLMPort => providers.primary,
+    inject: [INFRA.LlmProviders],
   },
   { provide: CACHE_PORT, useFactory: (): CachePort => new InMemoryCache() },
   { provide: TELEMETRY_PORT, useFactory: (): TelemetryPort => new ConsoleTelemetryAdapter() },
   {
     // AI Gateway (§10.2) : cache + validation + boucle de réparation + fallback + télémétrie,
-    // partagé par toutes les capacités (`parse_goal`, `generate_content`, …). Le stub sert de
-    // modèle de secours quand un vrai fournisseur est actif, pour ne jamais bloquer le domaine.
+    // partagé par toutes les capacités (`parse_goal`, `generate_content`, …). Le fournisseur de
+    // secours (autre provider réel, ou stub) évite de bloquer le domaine si le primaire échoue.
     provide: AI_GATEWAY,
-    useFactory: (llm: LLMPort, cache: CachePort, telemetry: TelemetryPort): AiGateway =>
-      new AiGateway(llm, cache, telemetry, process.env.ANTHROPIC_API_KEY ? new StubLlmAdapter() : undefined),
-    inject: [LLM_PORT, CACHE_PORT, TELEMETRY_PORT],
+    useFactory: (providers: SelectedLlmProviders, cache: CachePort, telemetry: TelemetryPort): AiGateway =>
+      new AiGateway(providers.primary, cache, telemetry, providers.fallback),
+    inject: [INFRA.LlmProviders, CACHE_PORT, TELEMETRY_PORT],
   },
   {
     provide: CONTENT_GENERATOR_PORT,

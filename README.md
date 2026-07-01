@@ -8,7 +8,8 @@ découplé des fournisseurs d'IA.
 > Japonais N5, outbox + journal d'événements, **Curriculum Planner** + **Sequencer**, **Diagnostic
 > adaptatif graph-aware**, **Assessment** (correction + évidence pondérée), **Format Selector**
 > (règles → bandit contraint) avec génération de contenu via l'**AI Gateway** (cache, réparation,
-> fallback, télémétrie ; fournisseur Anthropic optionnel), persistance Postgres/Drizzle optionnelle.
+> fallback, télémétrie ; fournisseurs Anthropic et/ou OpenAI optionnels), persistance
+> Postgres/Drizzle optionnelle.
 
 ## Prérequis
 
@@ -42,22 +43,27 @@ npm run db:setup                # migre le schéma + charge le graphe Japonais N
 DATABASE_URL=postgres://unisson:unisson@localhost:5432/unisson npm test   # inclut l'intégration PG
 ```
 
-### Fournisseur LLM (optionnel)
+### Fournisseur LLM (optionnel — Anthropic et/ou OpenAI)
 
-Sans `ANTHROPIC_API_KEY`, l'AI Gateway utilise `StubLlmAdapter` (déterministe, dev/CI). Avec la clé,
-`AnthropicLlmAdapter` devient le fournisseur **primaire** derrière `LLMPort` (le stub reste en
-secours automatique) — même bascule que Postgres vs. mémoire, sans rien changer au domaine :
+Sans `ANTHROPIC_API_KEY` ni `OPENAI_API_KEY`, l'AI Gateway utilise `StubLlmAdapter` (déterministe,
+dev/CI, aucun appel réseau). Avec une clé, le fournisseur correspondant devient **primaire**
+derrière `LLMPort` ; avec les deux, Anthropic est primaire par défaut et OpenAI sert de **secours
+automatique** (bascule inversable avec `LLM_PROVIDER`) — même principe que Postgres vs. mémoire,
+zéro ligne à changer dans le domaine ou les use-cases (§10.7) :
 
 ```bash
+cp .env.example .env               # renseigne ANTHROPIC_API_KEY et/ou OPENAI_API_KEY
 export ANTHROPIC_API_KEY=sk-ant-...
-export ANTHROPIC_MODEL=claude-3-5-haiku-20241022   # optionnel, valeur par défaut déjà sensée
-ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY npm test -w @unisson/ai-orchestration   # inclut l'intégration réelle
+# export OPENAI_API_KEY=sk-...     # optionnel : second fournisseur, sert de secours
+# export LLM_PROVIDER=openai       # optionnel : force explicitement un fournisseur
+npm test -w @unisson/ai-orchestration   # inclut les tests d'intégration réels (sautés sans clé)
 npm run start:api
 ```
 
 Le Gateway (`AiGateway`, §10.2) ajoute par-dessus n'importe quel fournisseur : cache exact,
 boucle de réparation (re-ask si la sortie ne respecte pas le schéma Zod), fallback de modèle,
-et télémétrie structurée par capacité.
+et télémétrie structurée par capacité. Toutes les variables (rôle, valeur par défaut, où obtenir
+une clé) sont documentées dans [`.env.example`](./.env.example).
 
 ### Essayer l'API
 
@@ -115,7 +121,7 @@ libs/
   assessment/          # Correction déterministe/fuzzy, évidence pondérée, taxonomie + misconceptions
   content/             # Learning Objects, formats, ContentGeneratorPort
   ai-orchestration/    # AI Gateway : LLMPort, AiGateway (cache/réparation/fallback/télémétrie),
-                       #   capabilities parse_goal + generate_content (Zod), adapters (stub, Anthropic)
+                       #   capabilities parse_goal + generate_content (Zod), adapters (stub, Anthropic, OpenAI)
   identity/            # IAM (générique)
   persistence/         # Drizzle schema + client PG + adapters (derrière les ports) + migration/seed
 ```

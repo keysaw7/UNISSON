@@ -1,16 +1,15 @@
 import type { LLMPort, LlmCompletionRequest, LlmCompletionResponse } from '../ports/llm.port';
 import { stripMarkdownFence } from './strip-markdown-fence';
 
-export interface AnthropicLlmAdapterOptions {
+export interface OpenAiLlmAdapterOptions {
   apiKey: string;
   model?: string;
   baseUrl?: string;
-  maxTokens?: number;
+  organization?: string;
 }
 
-const DEFAULT_MODEL = 'claude-3-5-haiku-20241022';
-const DEFAULT_BASE_URL = 'https://api.anthropic.com/v1/messages';
-const ANTHROPIC_VERSION = '2023-06-01';
+const DEFAULT_MODEL = 'gpt-4o-mini';
+const DEFAULT_BASE_URL = 'https://api.openai.com/v1/chat/completions';
 
 const SYSTEM_PROMPT =
   'Tu es un moteur de génération pour un système pédagogique. Réponds UNIQUEMENT avec du JSON ' +
@@ -18,22 +17,23 @@ const SYSTEM_PROMPT =
   'sans commentaire.';
 
 /**
- * Adapter Anthropic pour `LLMPort` (§10.7 : « ajouter un fournisseur = un adapter »). Seul endroit
+ * Adapter OpenAI pour `LLMPort` (§10.7 : « ajouter un fournisseur = un adapter »). Seul endroit
  * du système qui connaît l'API concrète du fournisseur — le domaine et l'AI Gateway n'en savent
  * rien. Le contenu (prompt, validation, cache, réparation) reste géré par l'`AiGateway`, ce fichier
- * ne fait QUE le transport HTTP.
+ * ne fait QUE le transport HTTP. `response_format: json_object` force une sortie JSON côté modèle,
+ * en complément du filet de sécurité `stripMarkdownFence`.
  */
-export class AnthropicLlmAdapter implements LLMPort {
+export class OpenAiLlmAdapter implements LLMPort {
   private readonly apiKey: string;
   private readonly model: string;
   private readonly baseUrl: string;
-  private readonly maxTokens: number;
+  private readonly organization?: string;
 
-  constructor(options: AnthropicLlmAdapterOptions) {
+  constructor(options: OpenAiLlmAdapterOptions) {
     this.apiKey = options.apiKey;
     this.model = options.model ?? DEFAULT_MODEL;
     this.baseUrl = options.baseUrl ?? DEFAULT_BASE_URL;
-    this.maxTokens = options.maxTokens ?? 1024;
+    this.organization = options.organization;
   }
 
   async complete(request: LlmCompletionRequest): Promise<LlmCompletionResponse> {
@@ -41,24 +41,26 @@ export class AnthropicLlmAdapter implements LLMPort {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        'x-api-key': this.apiKey,
-        'anthropic-version': ANTHROPIC_VERSION,
+        authorization: `Bearer ${this.apiKey}`,
+        ...(this.organization ? { 'openai-organization': this.organization } : {}),
       },
       body: JSON.stringify({
         model: this.model,
-        max_tokens: this.maxTokens,
-        system: SYSTEM_PROMPT,
-        messages: [{ role: 'user', content: request.prompt }],
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: request.prompt },
+        ],
       }),
     });
 
     if (!res.ok) {
       const body = await res.text().catch(() => '');
-      throw new Error(`Anthropic API error (${res.status}) pour la capacité "${request.capability}": ${body}`);
+      throw new Error(`OpenAI API error (${res.status}) pour la capacité "${request.capability}": ${body}`);
     }
 
-    const payload = (await res.json()) as { content?: Array<{ type: string; text?: string }> };
-    const text = payload.content?.find((block) => block.type === 'text')?.text ?? '';
+    const payload = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
+    const text = payload.choices?.[0]?.message?.content ?? '';
     return { text: stripMarkdownFence(text) };
   }
 }

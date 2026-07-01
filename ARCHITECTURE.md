@@ -4,7 +4,7 @@
 > On l'alimente à chaque étape. Rien ici n'est « du code » : c'est la réflexion d'architecture.
 
 **Dernière mise à jour :** 2026-07-01 — AI Gateway opérationnel (ADR-050) — cache + réparation + fallback + télémétrie, fournisseur Anthropic réel derrière `LLMPort`
-**Statut :** Conception complète (50 ADR) + **Phases 1–3 implémentées** : cœur scientifique Maîtrise+Oubli (FSRS+bayésien), graphe Japonais N5, outbox + journal d'événements, **Curriculum Planner** (glouton pondéré) + **Sequencer** (piloté par la rétrievabilité), **Diagnostic adaptatif graph-aware**, **Assessment** (correction + évidence pondérée), **Format Selector** (règles → bandit contraint), **AI Gateway** générique avec fournisseur LLM réel optionnel, persistance Postgres/Drizzle optionnelle derrière les ports (99 tests, verts in-memory **et** Postgres réel — 1 test d'intégration Anthropic sauté sans `ANTHROPIC_API_KEY`). Voir `README.md`.
+**Statut :** Conception complète (50 ADR) + **Phases 1–3 implémentées** : cœur scientifique Maîtrise+Oubli (FSRS+bayésien), graphe Japonais N5, outbox + journal d'événements, **Curriculum Planner** (glouton pondéré) + **Sequencer** (piloté par la rétrievabilité), **Diagnostic adaptatif graph-aware**, **Assessment** (correction + évidence pondérée), **Format Selector** (règles → bandit contraint), **AI Gateway** générique avec fournisseur LLM réel optionnel, persistance Postgres/Drizzle optionnelle derrière les ports (112 tests, verts in-memory **et** Postgres réel — 4 tests d'intégration réels sautés sans clés API/`DATABASE_URL`). Voir `README.md`.
 
 ---
 
@@ -2088,15 +2088,20 @@ Format : `ADR-NNN — Titre` · Statut · Contexte · Décision · Conséquences
   invalide, **répare** (re-ask avec les erreurs, jusqu'à `maxRepairAttempts`), (5) si le modèle
   primaire échoue (erreur réseau/HTTP), bascule sur un modèle de **secours** si fourni, (6) logue
   systématiquement capacité/latence/tentatives/validité/cache-hit via `TelemetryPort`. `LLMPort` gagne
-  un premier adapter réel, `AnthropicLlmAdapter` (API Messages, transport HTTP pur — aucune logique
-  métier). `InfraModule` bascule automatiquement : `ANTHROPIC_API_KEY` défini → Anthropic en primaire
-  + `StubLlmAdapter` en secours ; sinon → `StubLlmAdapter` seul (dev/CI, comme Postgres vs. mémoire).
+  deux adapters réels, `AnthropicLlmAdapter` et `OpenAiLlmAdapter` (API Messages / Chat Completions,
+  transport HTTP pur — aucune logique métier, filet `stripMarkdownFence` partagé). `selectLlmProviders`
+  centralise la bascule à partir de l'environnement (`LLM_PROVIDER`, `ANTHROPIC_API_KEY`,
+  `OPENAI_API_KEY`) : une clé présente → ce fournisseur en primaire, l'autre (ou le stub) en secours ;
+  les deux présentes → Anthropic primaire par défaut (`LLM_PROVIDER` inverse ce choix) ; aucune → stub
+  seul (dev/CI, comme Postgres vs. mémoire). `LLM_PROVIDER` demandé sans la clé correspondante échoue
+  tôt plutôt que de retomber silencieusement sur le stub.
 - **Conséquences :** Ajouter une 3e capability ne demandera plus de ré-écrire cache/réparation/
-  télémétrie — seulement prompt + schéma. Ajouter un 2e fournisseur (§10.7) = un nouvel adapter
-  `LLMPort` + une ligne dans la factory `InfraModule`, zéro ligne dans le domaine ni les capabilities.
+  télémétrie — seulement prompt + schéma. Ajouter un 3e fournisseur (§10.7) = un nouvel adapter
+  `LLMPort` + une branche dans `selectLlmProviders`, zéro ligne dans le domaine ni les capabilities.
   Le cache reste **exact** pour l'instant (le sémantique/pgvector est une extension future du même
-  `CachePort`, cf. roadmap). Un test d'intégration réel (`anthropic-llm.adapter.integration.test.ts`)
-  est sauté sans `ANTHROPIC_API_KEY` — la CI reste verte sans clé, comme pour Postgres.
+  `CachePort`, cf. roadmap). Les tests d'intégration réels (`anthropic-llm.adapter.integration.test.ts`,
+  `openai-llm.adapter.integration.test.ts`) sont sautés sans clé correspondante — la CI reste verte
+  sans configuration, comme pour Postgres.
 
 ---
 
@@ -2179,9 +2184,10 @@ Format : `ADR-NNN — Titre` · Statut · Contexte · Décision · Conséquences
 - [x] **AI Gateway opérationnel** (§10.2, §10.5, §10.6) : `AiGateway` générique (cache exact,
       boucle de réparation avec re-ask, fallback de modèle, télémétrie) partagé par toutes les
       capacités — `parse_goal` et `generate_content` ne décrivent plus QUE prompt + schéma.
-      `AnthropicLlmAdapter` (vrai fournisseur derrière `LLMPort`, bascule automatique si
-      `ANTHROPIC_API_KEY` est défini, sinon `StubLlmAdapter` en secours et par défaut en dev/CI —
-      même bascule que Postgres vs. mémoire). *(ADR-050)*
+      Deux vrais fournisseurs derrière `LLMPort` (`AnthropicLlmAdapter`, `OpenAiLlmAdapter`),
+      sélectionnés par `selectLlmProviders` selon l'environnement (`LLM_PROVIDER`,
+      `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`) — `StubLlmAdapter` par défaut et en secours, même
+      bascule que Postgres vs. mémoire. *(ADR-050)*
 
 **Prochaines étapes (Phase 3) :**
 
